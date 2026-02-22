@@ -17,6 +17,18 @@
 </head>
 <body>
     <div id="app-container">
+        <!-- Screen 0: First Run Setup -->
+        <div id="setup-screen" class="screen">
+            <div class="header">
+                <h1>Configurazione</h1>
+            </div>
+            <div class="content-center">
+                <p style="margin-bottom: 20px;">Inserisci il Client ID di Google per iniziare.</p>
+                <input type="text" id="client-id-input" placeholder="Incolla qui il Client ID" style="width: 90%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 8px;">
+                <button id="btn-save-config" class="btn-primary">Salva e Inizia</button>
+            </div>
+        </div>
+
         <!-- Screen 1: Camera / Home -->
         <div id="camera-screen" class="screen active">
             <div class="header">

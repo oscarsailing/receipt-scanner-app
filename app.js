@@ -1,19 +1,22 @@
 // CONFIGURATION
-// Replace with your Google Cloud Client ID (from console.cloud.google.com)
-const CLIENT_ID = 'YOUR_CLIENT_ID_HERE'; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file'; 
+let CLIENT_ID = localStorage.getItem('google_client_id'); // Load from storage or null
 
 // --- ELEMENTS ---
 const btnLogin = document.getElementById('btn-login');
 const userInfo = document.getElementById('user-info');
 const cameraInput = document.getElementById('camera-input');
 
-
 // Screens
 const cameraScreen = document.getElementById('camera-screen');
-
+// Setup Screen Element (Added dynamically or assumed to be in HTML)
+const setupScreen = document.getElementById('setup-screen');
 const loadingScreen = document.getElementById('loading-screen');
 const successScreen = document.getElementById('success-screen');
+
+// Configuration Elements
+const btnSaveConfig = document.getElementById('btn-save-config');
+const clientIdInput = document.getElementById('client-id-input');
 
 // Alert Modal
 const alertModal = document.getElementById('alert-modal');
@@ -24,6 +27,57 @@ const alertBtn = document.getElementById('alert-btn');
 let currentFile = null;
 let tokenClient;
 let accessToken = null;
+
+// --- Configuration Logic ---
+function initApp() {
+    // 1. Check for Client ID in URL (for easy setup via link)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlClientId = urlParams.get('client_id');
+    
+    if (urlClientId) {
+        localStorage.setItem('google_client_id', urlClientId);
+        CLIENT_ID = urlClientId;
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // 2. Check if we have a Client ID
+    if (!CLIENT_ID) {
+        // If not configured, show setup screen
+        if(setupScreen) {
+             showScreen(setupScreen);
+        } else {
+             // Fallback if HTML not updated yet
+             const id = prompt("Inserisci il Google Client ID per configurare l'app:");
+             if(id) {
+                 localStorage.setItem('google_client_id', id);
+                 CLIENT_ID = id;
+                 window.location.reload();
+             }
+        }
+        return;
+    }
+
+    // 3. Normal Startup
+    showScreen(cameraScreen);
+}
+
+// Handle Setup Save
+if(btnSaveConfig) {
+    btnSaveConfig.addEventListener('click', () => {
+        const inputId = clientIdInput.value.trim();
+        if (inputId) {
+            localStorage.setItem('google_client_id', inputId);
+            CLIENT_ID = inputId;
+            showScreen(cameraScreen);
+            // Re-init client with new ID if needed
+            initClient();
+        } else {
+            alert("Per favore inserisci un Client ID valido.");
+        }
+    });
+}
+
 
 // --- Navigation ---
 function showScreen(screenElement) {
@@ -79,6 +133,7 @@ function updateLoginUI(isLoggedIn) {
 
 // Initialize on load
 window.onload = function() {
+    initApp();
     // Check if Google Identity script is loaded
     if (typeof google === 'undefined') {
         console.warn("Google Script not loaded yet.");
