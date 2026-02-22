@@ -185,39 +185,11 @@
         </div>
     </div>
 
-    <!-- Chat FAB -->
-    <button id="chat-fab" class="chat-fab" style="display:none;" aria-label="Assistente">
-        <svg width="24" height="24" aria-hidden="true"><use href="#icon-chat"/></svg>
+    <!-- Accountant FAB -->
+    <button id="chat-fab" class="chat-fab" style="display:none;" aria-label="Invia al commercialista">
+        <svg width="18" height="18" aria-hidden="true"><use href="#icon-send"/></svg>
+        <span>Commercialista</span>
     </button>
-
-    <!-- Chat Panel -->
-    <div id="chat-panel" class="chat-panel" role="dialog" aria-modal="true" aria-label="Assistente">
-        <div class="chat-sheet">
-            <div class="chat-sheet-handle"></div>
-            <div class="chat-sheet-header">
-                <span class="chat-sheet-title">Assistente</span>
-                <button id="chat-close-btn" class="icon-btn" aria-label="Chiudi">
-                    <svg width="20" height="20" fill="currentColor"><use href="#icon-close"/></svg>
-                </button>
-            </div>
-            <div id="chat-messages" class="chat-messages"></div>
-            <div id="chat-chips" class="chat-chips" style="display:none;">
-                <button class="chat-chip" data-intent="email">
-                    <svg width="14" height="14" aria-hidden="true"><use href="#icon-send"/></svg>
-                    Email al commercialista
-                </button>
-                <button class="chat-chip" data-intent="count">
-                    <svg width="14" height="14" aria-hidden="true"><use href="#icon-receipt"/></svg>
-                    Quanti scontrini?
-                </button>
-            </div>
-            <div class="chat-input-row">
-                <input id="chat-input" class="chat-input" type="text" placeholder="Scrivi un messaggio…" autocomplete="off">
-                <button id="chat-send-btn" class="chat-send-btn" aria-label="Invia">
-                    <svg width="18" height="18" fill="currentColor"><use href="#icon-send"/></svg>
-                </button>
-            </div>
-        </div>
     </div>
 
     <script src="app.js"></script>

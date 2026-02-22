@@ -58,12 +58,6 @@ const receiptActionsConfirm = document.getElementById('receipt-actions-confirm')
 
 // Chat
 const chatFab     = document.getElementById('chat-fab');
-const chatPanel   = document.getElementById('chat-panel');
-const chatCloseBtn= document.getElementById('chat-close-btn');
-const chatMessages= document.getElementById('chat-messages');
-const chatChips   = document.getElementById('chat-chips');
-const chatInput   = document.getElementById('chat-input');
-const chatSendBtn = document.getElementById('chat-send-btn');
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let accessToken   = null;
@@ -78,10 +72,6 @@ let uploadHistory = JSON.parse(localStorage.getItem('upload_history') || '[]');
 
 // Receipt viewer state
 let viewingIndex = -1;
-
-// Chat state machine
-let chatState = 'IDLE'; // IDLE | CONFIRM_SEND
-let pendingEmailReceipts = [];
 
 // Accountant email (set via ?accountant= URL param)
 let accountantEmail = localStorage.getItem('accountant_email') || '';
@@ -665,79 +655,8 @@ if (receiptModal) receiptModal.addEventListener('click', (e) => {
 });
 
 // =============================================================================
-// CHAT ASSISTANT (scripted, no external AI)
+// ACCOUNTANT BUTTON — one-tap email flow
 // =============================================================================
-function openChat() {
-    if (!chatPanel) return;
-    chatMessages.innerHTML = '';
-    chatState = 'IDLE';
-    pendingEmailReceipts = [];
-    chatChips.style.display = 'flex';
-    appendChatMsg('bot', 'Ciao! Posso aiutarti a inviare gli scontrini al commercialista o a controllare quanti ne hai salvati.');
-    chatPanel.classList.add('active');
-    chatInput.focus();
-}
-
-function closeChat() {
-    if (chatPanel) chatPanel.classList.remove('active');
-    chatState = 'IDLE';
-}
-
-function appendChatMsg(role, text) {
-    const row = document.createElement('div');
-    row.className = 'chat-msg chat-msg--' + role;
-    const bubble = document.createElement('div');
-    bubble.className = 'chat-bubble';
-    bubble.textContent = text;
-    row.appendChild(bubble);
-    chatMessages.appendChild(row);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function handleChatSend() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    chatInput.value = '';
-    chatChips.style.display = 'none';
-    appendChatMsg('user', text);
-    processUserMessage(text);
-}
-
-function processUserMessage(text) {
-    if (chatState === 'CONFIRM_SEND') {
-        const t = text.toLowerCase();
-        if (t.includes('si') || t.includes('ok') || t.includes('manda') || t.includes('invia') || t === 's') {
-            executeSendToAccountant();
-        } else {
-            chatState = 'IDLE';
-            appendChatMsg('bot', 'Ok, annullato. Posso aiutarti con altro?');
-            chatChips.style.display = 'flex';
-        }
-        return;
-    }
-    const intent = detectIntent(text);
-    if (intent === 'email')       initiateSendToAccountant();
-    else if (intent === 'count')  showReceiptCount();
-    else                          appendChatMsg('bot', 'Non ho capito. Prova a dire "manda email al commercialista" oppure "quanti scontrini ho".');
-}
-
-function detectIntent(text) {
-    const t = text.toLowerCase();
-    const emailWords = ['email', 'commercialista', 'manda', 'invia', 'spedisci', 'mandare', 'inviare'];
-    const countWords = ['quanti', 'conta', 'numero', 'scontrini'];
-    if (emailWords.some(w => t.includes(w))) return 'email';
-    if (countWords.some(w => t.includes(w))) return 'count';
-    return 'unknown';
-}
-
-function showReceiptCount() {
-    const total = uploadHistory.length;
-    const unsent = uploadHistory.filter(e => !e.sent).length;
-    const sent   = total - unsent;
-    appendChatMsg('bot', 'Hai ' + total + ' scontrini salvati: ' + unsent + ' da inviare, ' + sent + ' gia inviati.');
-    chatChips.style.display = 'flex';
-}
-
 function getLastMonthUnsent() {
     const now = new Date();
     const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -745,30 +664,33 @@ function getLastMonthUnsent() {
     return uploadHistory.filter(e => !e.sent && e.ts >= firstOfLastMonth && e.ts < firstOfThisMonth);
 }
 
-function initiateSendToAccountant() {
+function sendToAccountantFlow() {
     if (!accountantEmail) {
-        appendChatMsg('bot', 'Non ho l\'email del commercialista. Chiedi a chi gestisce l\'app di impostare ?accountant=email@esempio.it nell\'URL.');
+        showAlert('Nessun commercialista', 'Chiedi a chi gestisce l\'app di impostare ?accountant=email@esempio.it nell\'URL.');
         return;
     }
-    pendingEmailReceipts = getLastMonthUnsent();
-    if (pendingEmailReceipts.length === 0) {
-        appendChatMsg('bot', 'Non ho trovato scontrini del mese scorso da inviare. Sono stati gia tutti spediti!');
-        chatChips.style.display = 'flex';
-        return;
-    }
-    const names = pendingEmailReceipts.map(e => e.name).join(', ');
-    appendChatMsg('bot', 'Ho trovato ' + pendingEmailReceipts.length + ' scontrini del mese scorso: ' + names + '.\n\nVuoi che prepari l\'email per ' + accountantEmail + '? (Rispondi Si o No)');
-    chatState = 'CONFIRM_SEND';
-}
-
-function executeSendToAccountant() {
-    chatState = 'IDLE';
+    const receipts = getLastMonthUnsent();
     const now = new Date();
     const monthName = new Date(now.getFullYear(), now.getMonth() - 1, 1)
         .toLocaleString('it-IT', { month: 'long', year: 'numeric' });
 
+    if (receipts.length === 0) {
+        showAlert('Niente da inviare', 'Non ci sono scontrini di ' + monthName + ' da inviare. Sono stati gia tutti spediti!');
+        return;
+    }
+
+    // Use the alert modal: OK = annulla, override button = "Invia email"
+    if (alertBtnOverride) alertBtnOverride._overrideFn = () => executeSendToAccountant(receipts, monthName);
+    showAlert(
+        'Invia al commercialista',
+        'Trovati ' + receipts.length + ' scontrini di ' + monthName + ' da inviare a ' + accountantEmail + '.',
+        'Invia email'
+    );
+}
+
+function executeSendToAccountant(receipts, monthName) {
     const subject = 'Scontrini ' + monthName;
-    const lines = pendingEmailReceipts.map(e => {
+    const lines = receipts.map(e => {
         const d = new Date(e.ts).toLocaleDateString('it-IT');
         const link = e.driveFileId ? 'https://drive.google.com/file/d/' + e.driveFileId + '/view' : '(link non disponibile)';
         return '- ' + e.name + ' (' + d + '): ' + link;
@@ -781,33 +703,13 @@ function executeSendToAccountant() {
     window.location.href = mailto;
 
     // Mark receipts as sent
-    pendingEmailReceipts.forEach(e => {
+    receipts.forEach(e => {
         const match = uploadHistory.find(h => h.ts === e.ts && h.name === e.name);
         if (match) { match.sent = true; match.sentTs = Date.now(); }
     });
     localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
     renderHistory();
-
-    appendChatMsg('bot', 'Email aperta! Ho segnato ' + pendingEmailReceipts.length + ' scontrini come "Spediti".');
-    chatChips.style.display = 'flex';
-    pendingEmailReceipts = [];
 }
 
-// Wire chat UI
-if (chatFab)      chatFab.addEventListener('click', openChat);
-if (chatCloseBtn) chatCloseBtn.addEventListener('click', closeChat);
-if (chatSendBtn)  chatSendBtn.addEventListener('click', handleChatSend);
-if (chatInput) {
-    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleChatSend(); });
-}
-if (chatPanel) {
-    chatPanel.addEventListener('click', (e) => { if (e.target === chatPanel) closeChat(); });
-}
-document.querySelectorAll('.chat-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-        const intent = chip.dataset.intent;
-        chatChips.style.display = 'none';
-        if (intent === 'email')       initiateSendToAccountant();
-        else if (intent === 'count')  showReceiptCount();
-    });
-});
+if (chatFab) chatFab.addEventListener('click', sendToAccountantFlow);
+
