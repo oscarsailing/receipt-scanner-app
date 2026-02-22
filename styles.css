@@ -326,6 +326,37 @@ body {
     padding: 0 16px 8px;
 }
 
+.strip-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 16px;
+}
+.strip-header .strip-label {
+    padding-right: 0;
+}
+
+.strip-drive-link {
+    display: none; /* shown by JS */
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--blue);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+}
+.strip-drive-link:active {
+    background: rgba(0,122,255,0.08);
+}
+.strip-drive-link .icon-xs {
+    width: 14px;
+    height: 14px;
+}
+
 .thumbnail-list {
     display: flex;
     flex-direction: row;

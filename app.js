@@ -34,6 +34,7 @@ const counterText       = document.getElementById('counter-text');
 
 const thumbnailStrip    = document.getElementById('thumbnail-strip');
 const thumbnailList     = document.getElementById('thumbnail-list');
+const btnOpenDrive      = document.getElementById('btn-open-drive');
 
 const offlineBanner     = document.getElementById('offline-banner');
 const offlineText       = document.getElementById('offline-text');
@@ -101,6 +102,7 @@ window.addEventListener('load', () => {
     renderHistory();
     updateCounterUI();
     updateQueueBadge();
+    updateDriveLink();
 
     // Show correct UI state
     if (accessToken) {
@@ -154,6 +156,16 @@ function updateQueueBadge() {
         offlineBanner.style.display = 'flex';
     } else {
         offlineBanner.style.display = 'none';
+    }
+}
+
+function updateDriveLink() {
+    if (!btnOpenDrive) return;
+    if (driveFolderId) {
+        btnOpenDrive.href = `https://drive.google.com/drive/folders/${driveFolderId}`;
+        btnOpenDrive.style.display = 'flex';
+    } else {
+        btnOpenDrive.style.display = 'none';
     }
 }
 
@@ -350,6 +362,7 @@ async function getOrCreateFolder() {
     }
 
     localStorage.setItem('drive_folder_id', driveFolderId);
+    updateDriveLink();
     return driveFolderId;
 }
 
@@ -438,6 +451,7 @@ function renderHistory() {
         return;
     }
     thumbnailStrip.style.display = 'block';
+    updateDriveLink();
     uploadHistory.forEach(entry => {
         const item = document.createElement('div');
         item.className = 'thumbnail-item';

@@ -31,6 +31,9 @@
         <symbol id="icon-wifi-off" viewBox="0 0 24 24" fill="currentColor">
             <path d="M22.99 9C19.15 5.16 13.8 3.76 8.84 4.78L11 6.95c3.24-.4 6.6.6 9.11 3.11L22.99 9zm-4 4c-.96-.96-2.1-1.65-3.33-2.08l1.9 1.9.02-.01L20 14l-1.01-1zM1.41 2 0 3.41l2.52 2.52A9.977 9.977 0 0 0 2 10c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.949 7.949 0 0 1 4 10c0-2.04.77-3.9 2.04-5.31L7.5 6.15C6.56 7.22 6 8.64 6 10c0 1.66.67 3.16 1.76 4.25l1.42-1.42A4.005 4.005 0 0 1 8 10c0-.68.16-1.32.44-1.89l1.68 1.68A2.01 2.01 0 0 0 10 10a2 2 0 0 0 2 2c.09 0 .17-.01.25-.02L20.59 20 22 18.59 3.41 2 1.41 2zm18.17 11.24c.01.25.02.5.02.76 0 2.21-1.79 4-4 4H6c-2.76 0-5-2.24-5-5 0-2.25 1.49-4.17 3.54-4.79L3.1 6.77A7 7 0 0 0 0 12c0 3.86 3.14 7 7 7h9c3.27 0 5.99-2.22 6.77-5.23l-2.19-2.19.02.21-.02-.54z"/>
         </symbol>
+        <symbol id="icon-folder" viewBox="0 0 24 24" fill="none">
+            <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        </symbol>
     </svg>
 
     <div id="app-container">
@@ -93,7 +96,13 @@
 
             <!-- Recent Uploads Strip -->
             <footer id="thumbnail-strip" class="thumbnail-strip" style="display:none;">
-                <p class="strip-label">Inviati di recente</p>
+                <div class="strip-header">
+                    <p class="strip-label">Inviati di recente</p>
+                    <a id="btn-open-drive" class="strip-drive-link" target="_blank" rel="noopener noreferrer" style="display:none;" aria-label="Apri cartella Drive">
+                        <svg class="icon-xs" aria-hidden="true"><use href="#icon-folder"/></svg>
+                        Apri Drive
+                    </a>
+                </div>
                 <div id="thumbnail-list" class="thumbnail-list" role="list"></div>
             </footer>
 
