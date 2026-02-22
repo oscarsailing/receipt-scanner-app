@@ -2,15 +2,18 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scontrini Papà</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Scontrini">
     <!-- Load OpenCV.js for lightweight blur detection -->
     <script async src="https://docs.opencv.org/4.8.0/opencv.js" type="text/javascript"></script>
+    <!-- Load Google Identity Services SDK -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
     <div id="app-container">
@@ -19,27 +22,24 @@
             <div class="header">
                 <h1>Scontrini Papà</h1>
             </div>
+            
             <div class="content-center">
-                <label for="camera-input" class="btn-primary massive-btn">
+                <!-- Google Login Button (Visible when not logged in) -->
+                <div id="login-container" style="margin-bottom: 20px;">
+                    <button id="btn-login" class="btn-primary" style="padding: 15px 30px; font-size: 18px;">
+                        🔐 Accedi con Google
+                    </button>
+                    <p id="user-info" style="margin-top: 10px; font-size: 14px; text-align: center; display: none;"></p>
+                </div>
+
+                <label for="camera-input" class="btn-primary massive-btn web-only">
                     📷 Scatta Foto
                 </label>
-                <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+                <input type="file" id="camera-input" accept="image/*" capture="environment">
             </div>
         </div>
 
-        <!-- Screen 2: Review -->
-        <div id="review-screen" class="screen">
-            <div class="header">
-                <h1>Controlla Foto</h1>
-            </div>
-            <div class="image-preview-container">
-                <img id="preview-image" src="" alt="Anteprima Scontrino">
-            </div>
-            <div class="button-group">
-                <button id="btn-retake" class="btn-secondary giant-btn">❌ Riprova</button>
-                <button id="btn-send" class="btn-success giant-btn">✅ Va Bene (Invia)</button>
-            </div>
-        </div>
+
 
         <!-- Screen 3: Loading -->
         <div id="loading-screen" class="screen">

@@ -22,14 +22,16 @@ Specifically designed for a non-digitally savvy user (the creator's father). The
   * Utilizes HTML5 `<input type="file" accept="image/*" capture="environment">` to directly open the native iOS camera.
   * Auto-focus and auto-flash are handled natively by the iOS camera app.
 
-### 4.2. AI-Assisted Image Review
-* **Feature:** A simple binary choice after taking a photo, augmented by a lightweight on-device AI check.
+### 4.2. AI-Driven Automation (No Manual Review)
+* **Feature:** Fully automated quality check and upload process.
 * **Requirements:**
-  * **Quality Check:** Implement a lightweight, fully local in-browser AI model (e.g., TensorFlow.js or a simple OpenCV.js blur detection algorithm) to check if the image is too blurry or too dark *before* showing the review screen. *Note: Must be extremely lightweight to run in Safari on an iPhone 6 (1GB RAM).*
-  * **Auto-Feedback:** If the image is poor quality, automatically show a friendly prompt in a macOS-style alert dialog: "La foto è un po' sfocata o scura. Riprova per favore!" (The photo is a bit blurry or dark. Please try again!) with a single "Riprova" (Try Again) button.
-  * **Manual Review:** If the AI passes the image, show the captured photo clearly.
-  * Two giant buttons: "Va Bene (Invia)" (Looks Good - Send) in Green and "Riprova" (Try Again) in Red, utilizing macOS button styling.
-  * No editing, cropping, or filtering options.
+  * **AI Analysis:** Immediately after capture, the local AI checks for blur/darkness.
+  * **Automatic Decision:**
+    * **If Good:** Automatically triggers the upload to Google Drive without user intervention.
+    * **If Bad:** Automatically alerts the user ("Foto sfocata/scura, riprova") and returns to camera.
+  * **Result Feedback:**
+    * **Success:** Displays "Scontrino salvato su Google Drive!" with a success icon.
+    * **Failure:** Displays error message and returns to camera.
 
 ### 4.3. Invisible Google Drive Integration
 * **Feature:** Background uploading that requires zero user management.

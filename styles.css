@@ -76,6 +76,11 @@ body {
     padding: 20px;
 }
 
+/* Hidden File Input */
+#camera-input {
+    display: none;
+}
+
 /* Buttons */
 button, .btn-primary, .btn-secondary, .btn-success {
     border: none;
