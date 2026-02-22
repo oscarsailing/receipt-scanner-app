@@ -5,7 +5,7 @@
 // =============================================================================
 
 // ── DEVELOPER CONFIG ─────────────────────────────────────────────────────────
-const CLIENT_ID   = localStorage.getItem('google_client_id') || 'YOUR_CLIENT_ID_HERE';
+const CLIENT_ID   = localStorage.getItem('google_client_id') || '103872449955-maa3ttpalvbp2nqnuqmspm4v5f30o1at.apps.googleusercontent.com';
 const SCOPES      = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'Scontrini Papà';
 const MAX_HISTORY = 20; // max thumbnails stored in localStorage
