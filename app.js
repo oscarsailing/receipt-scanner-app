@@ -8,7 +8,7 @@
 const CLIENT_ID   = localStorage.getItem('google_client_id') || '103872449955-maa3ttpalvbp2nqnuqmspm4v5f30o1at.apps.googleusercontent.com';
 const SCOPES      = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'Scontrini Papà';
-const MAX_HISTORY = 20; // max thumbnails stored in localStorage
+const MAX_HISTORY = 40; // max thumbnails stored in localStorage
 // Redirect URI must match exactly what is registered in Google Cloud Console
 const REDIRECT_URI = 'https://oscarsailing.github.io/receipt-scanner-app/';
 
@@ -43,6 +43,27 @@ const alertModal        = document.getElementById('alert-modal');
 const alertTitleEl      = document.getElementById('alert-title');
 const alertMessageEl    = document.getElementById('alert-message');
 const alertBtn          = document.getElementById('alert-btn');
+const alertBtnOverride  = document.getElementById('alert-btn-override');
+
+// Receipt viewer
+const receiptModal          = document.getElementById('receipt-modal');
+const receiptViewerImg      = document.getElementById('receipt-viewer-img');
+const receiptViewerName     = document.getElementById('receipt-viewer-name');
+const receiptCloseBtn       = document.getElementById('receipt-close-btn');
+const receiptDeleteBtn      = document.getElementById('receipt-delete-btn');
+const receiptConfirmBtn     = document.getElementById('receipt-confirm-btn');
+const receiptCancelDeleteBtn= document.getElementById('receipt-canceldelete-btn');
+const receiptActionsNormal  = document.getElementById('receipt-actions-normal');
+const receiptActionsConfirm = document.getElementById('receipt-actions-confirm');
+
+// Chat
+const chatFab     = document.getElementById('chat-fab');
+const chatPanel   = document.getElementById('chat-panel');
+const chatCloseBtn= document.getElementById('chat-close-btn');
+const chatMessages= document.getElementById('chat-messages');
+const chatChips   = document.getElementById('chat-chips');
+const chatInput   = document.getElementById('chat-input');
+const chatSendBtn = document.getElementById('chat-send-btn');
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let accessToken   = null;
@@ -52,8 +73,18 @@ let driveFolderId = localStorage.getItem('drive_folder_id') || null;
 // Offline queue: array of { dataUrl, mimeType, timestamp }
 let offlineQueue  = JSON.parse(localStorage.getItem('offline_queue') || '[]');
 
-// Upload history: array of { thumbDataUrl, name, ts }
+// Upload history: array of { thumbDataUrl, name, ts, driveFileId, sent, sentTs }
 let uploadHistory = JSON.parse(localStorage.getItem('upload_history') || '[]');
+
+// Receipt viewer state
+let viewingIndex = -1;
+
+// Chat state machine
+let chatState = 'IDLE'; // IDLE | CONFIRM_SEND
+let pendingEmailReceipts = [];
+
+// Accountant email (set via ?accountant= URL param)
+let accountantEmail = localStorage.getItem('accountant_email') || '';
 
 // =============================================================================
 // NAVIGATION
@@ -63,13 +94,33 @@ function showScreen(screenEl) {
     screenEl.classList.add('active');
 }
 
-function showAlert(title, message) {
+function showAlert(title, message, overrideLabel) {
     alertTitleEl.textContent = title;
     alertMessageEl.textContent = message;
+    if (overrideLabel && alertBtnOverride) {
+        alertBtnOverride.textContent = overrideLabel;
+        alertBtnOverride.style.display = 'flex';
+    } else if (alertBtnOverride) {
+        alertBtnOverride.style.display = 'none';
+        alertBtnOverride._overrideFn = null;
+    }
     alertModal.classList.add('active');
 }
 
 alertBtn.addEventListener('click', () => alertModal.classList.remove('active'));
+if (alertBtnOverride) {
+    alertBtnOverride.addEventListener('click', () => {
+        alertModal.classList.remove('active');
+        if (alertBtnOverride._overrideFn) alertBtnOverride._overrideFn();
+    });
+}
+
+// Show quality warning with optional override to upload anyway
+function showQualityWarning(title, message, file, imageUrl) {
+    if (alertBtnOverride) alertBtnOverride._overrideFn = () => routeUpload(file, imageUrl);
+    showAlert(title, message, 'Invia lo stesso');
+    resetApp();
+}
 
 // =============================================================================
 // INIT
@@ -82,6 +133,13 @@ window.addEventListener('load', () => {
         window.history.replaceState({}, document.title, window.location.pathname);
         window.location.reload();
         return;
+    }
+
+    // Allow setting accountant email via ?accountant= param
+    if (params.get('accountant')) {
+        accountantEmail = params.get('accountant');
+        localStorage.setItem('accountant_email', accountantEmail);
+        window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     // ── G-2: Parse OAuth token from URL hash (returned after redirect login) ──
@@ -135,6 +193,7 @@ btnLogin.addEventListener('click', startGoogleLogin);
 function showCameraUI() {
     loginSection.style.display = 'none';
     cameraSection.style.display = 'flex';
+    if (chatFab) chatFab.style.display = 'flex';
 }
 
 function updateCounterUI() {
@@ -196,53 +255,59 @@ function setLoadingText(msg) {
 }
 
 // =============================================================================
-// G-AI: IMAGE QUALITY CHECK (OpenCV.js)
+// CANVAS: IMAGE QUALITY CHECK (no external library)
 // =============================================================================
 function checkImageQuality(imgEl, imageUrl, file) {
-    if (typeof cv === 'undefined' || !cv.Mat) {
-        console.warn('[AI] OpenCV not ready — skipping quality check, uploading directly.');
-        routeUpload(file, imageUrl);
-        return;
-    }
-
     try {
-        const src = cv.imread(imgEl);
-        const gray = new cv.Mat();
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+        const W = 120, H = 120;
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgEl, 0, 0, W, H);
+        const { data } = ctx.getImageData(0, 0, W, H);
+        const total = W * H;
 
-        // Blur: Laplacian variance
-        const lap = new cv.Mat();
-        cv.Laplacian(gray, lap, cv.CV_64F);
-        const mean = new cv.Mat(), std = new cv.Mat();
-        cv.meanStdDev(lap, mean, std);
-        const variance = std.doubleAt(0, 0) ** 2;
+        // Brightness: average luma
+        let luma = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            luma += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        }
+        luma /= total;
 
-        // Brightness: grayscale mean
-        const bMean = new cv.Mat(), bStd = new cv.Mat();
-        cv.meanStdDev(gray, bMean, bStd);
-        const brightness = bMean.doubleAt(0, 0);
+        // Sharpness: Laplacian variance on luma channel
+        const gray = new Float32Array(total);
+        for (let i = 0; i < total; i++) gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
 
-        // Cleanup
-        [src, gray, lap, mean, std, bMean, bStd].forEach(m => m.delete());
+        let lap = 0, lapSq = 0;
+        for (let y = 1; y < H - 1; y++) {
+            for (let x = 1; x < W - 1; x++) {
+                const c = gray[y * W + x];
+                const v = Math.abs(-c * 4 + gray[(y-1)*W+x] + gray[(y+1)*W+x] + gray[y*W+(x-1)] + gray[y*W+(x+1)]);
+                lap += v; lapSq += v * v;
+            }
+        }
+        const n = (W - 2) * (H - 2);
+        const mean = lap / n;
+        const variance = lapSq / n - mean * mean;
 
-        console.log(`[AI] Variance=${variance.toFixed(1)} Brightness=${brightness.toFixed(1)}`);
+        console.log('[QA] luma=' + luma.toFixed(1) + ' variance=' + variance.toFixed(1));
 
-        const BLUR_THRESHOLD       = 50;
-        const BRIGHTNESS_THRESHOLD = 40;
+        const BLUR_THRESH       = 20;   // lower than OpenCV because we use abs-lap not std²
+        const DARK_THRESH       = 25;
+        const OVEREXPOSED_THRESH= 248;
 
-        if (variance < BLUR_THRESHOLD) {
-            showAlert('Foto sfocata', 'La foto è poco nitida. Tieni fermo il telefono e riprova.');
-            resetApp();
-        } else if (brightness < BRIGHTNESS_THRESHOLD) {
-            showAlert('Foto scura', 'C\'è poca luce. Avvicinati a una fonte luminosa e riprova.');
-            resetApp();
+        if (luma < DARK_THRESH) {
+            showQualityWarning('Foto scura', "C'è poca luce. Avvicinati a una fonte luminosa e riprova.", file, imageUrl);
+        } else if (luma > OVEREXPOSED_THRESH) {
+            showQualityWarning('Foto sovraesposta', 'Troppa luce diretta. Sposta lo scontrino in ombra e riprova.', file, imageUrl);
+        } else if (variance < BLUR_THRESH) {
+            showQualityWarning('Foto sfocata', 'La foto è poco nitida. Tieni fermo il telefono e riprova.', file, imageUrl);
         } else {
             routeUpload(file, imageUrl);
         }
     } catch (err) {
-        console.error('[AI] OpenCV error:', err);
-        // Fail-safe: upload anyway rather than blocking the user
-        routeUpload(file, imageUrl);
+        console.error('[QA] Canvas error:', err);
+        routeUpload(file, imageUrl); // fail-safe
     }
 }
 
@@ -408,7 +473,7 @@ async function uploadToGoogleDrive(file, imageUrl, opts = {}) {
 
         // Persist to history
         const thumb = await makeThumb(imageUrl);
-        addToHistory({ thumbDataUrl: thumb, name: fileName, ts: Date.now() });
+        addToHistory({ thumbDataUrl: thumb, name: fileName, ts: Date.now(), driveFileId: data.id, sent: false, sentTs: null });
 
         // Show success screen
         successPreview.src = imageUrl;
@@ -452,7 +517,7 @@ function renderHistory() {
     }
     thumbnailStrip.style.display = 'block';
     updateDriveLink();
-    uploadHistory.forEach(entry => {
+    uploadHistory.forEach((entry, idx) => {
         const item = document.createElement('div');
         item.className = 'thumbnail-item';
         item.setAttribute('role', 'listitem');
@@ -464,10 +529,19 @@ function renderHistory() {
 
         const badge = document.createElement('div');
         badge.className = 'thumbnail-check';
-        badge.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-check-circle"/></svg>`;
+        badge.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-check-circle"/></svg>';
 
         item.appendChild(img);
         item.appendChild(badge);
+
+        if (entry.sent) {
+            const sentBadge = document.createElement('div');
+            sentBadge.className = 'thumbnail-sent';
+            sentBadge.textContent = 'SPEDITO';
+            item.appendChild(sentBadge);
+        }
+
+        item.addEventListener('click', () => openReceiptViewer(idx));
         thumbnailList.appendChild(item);
     });
 }
@@ -523,6 +597,217 @@ function dataUrlToFile(dataUrl, mimeType, timestamp) {
     const bstr = atob(arr[1]);
     const u8arr = new Uint8Array(bstr.length);
     for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
-    const name = `Scontrino_queued_${timestamp}.jpg`;
+    const name = 'Scontrino_queued_' + timestamp + '.jpg';
     return new File([u8arr], name, { type: mimeType || 'image/jpeg' });
 }
+
+// =============================================================================
+// RECEIPT VIEWER
+// =============================================================================
+function openReceiptViewer(idx) {
+    if (!receiptModal) return;
+    viewingIndex = idx;
+    const entry = uploadHistory[idx];
+    if (!entry) return;
+    receiptViewerImg.src = entry.thumbDataUrl;
+    receiptViewerName.textContent = entry.name;
+    receiptActionsNormal.style.display = 'flex';
+    receiptActionsConfirm.style.display = 'none';
+    receiptModal.classList.add('active');
+}
+
+function closeReceiptViewer() {
+    if (receiptModal) receiptModal.classList.remove('active');
+    viewingIndex = -1;
+}
+
+function confirmDeleteReceipt() {
+    const entry = uploadHistory[viewingIndex];
+    if (!entry) { closeReceiptViewer(); return; }
+    receiptActionsNormal.style.display = 'none';
+    receiptActionsConfirm.style.display = 'flex';
+}
+
+async function executeDeleteReceipt() {
+    const entry = uploadHistory[viewingIndex];
+    if (!entry) { closeReceiptViewer(); return; }
+
+    // Delete from Drive if we have an ID and a valid token
+    if (entry.driveFileId && accessToken) {
+        try {
+            await fetch('https://www.googleapis.com/drive/v3/files/' + entry.driveFileId, {
+                method: 'DELETE',
+                headers: { Authorization: 'Bearer ' + accessToken }
+            });
+        } catch (err) {
+            console.warn('[Delete] Drive delete failed:', err);
+        }
+    }
+
+    // Remove from local history
+    uploadHistory.splice(viewingIndex, 1);
+    localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
+    updateCounterUI();
+    renderHistory();
+    closeReceiptViewer();
+}
+
+// Wire receipt viewer buttons
+if (receiptCloseBtn)       receiptCloseBtn.addEventListener('click', closeReceiptViewer);
+if (receiptDeleteBtn)      receiptDeleteBtn.addEventListener('click', confirmDeleteReceipt);
+if (receiptConfirmBtn)     receiptConfirmBtn.addEventListener('click', executeDeleteReceipt);
+if (receiptCancelDeleteBtn)receiptCancelDeleteBtn.addEventListener('click', () => {
+    receiptActionsNormal.style.display = 'flex';
+    receiptActionsConfirm.style.display = 'none';
+});
+if (receiptModal) receiptModal.addEventListener('click', (e) => {
+    if (e.target === receiptModal) closeReceiptViewer();
+});
+
+// =============================================================================
+// CHAT ASSISTANT (scripted, no external AI)
+// =============================================================================
+function openChat() {
+    if (!chatPanel) return;
+    chatMessages.innerHTML = '';
+    chatState = 'IDLE';
+    pendingEmailReceipts = [];
+    chatChips.style.display = 'flex';
+    appendChatMsg('bot', 'Ciao! Posso aiutarti a inviare gli scontrini al commercialista o a controllare quanti ne hai salvati.');
+    chatPanel.classList.add('active');
+    chatInput.focus();
+}
+
+function closeChat() {
+    if (chatPanel) chatPanel.classList.remove('active');
+    chatState = 'IDLE';
+}
+
+function appendChatMsg(role, text) {
+    const row = document.createElement('div');
+    row.className = 'chat-msg chat-msg--' + role;
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble';
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatMessages.appendChild(row);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function handleChatSend() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    chatInput.value = '';
+    chatChips.style.display = 'none';
+    appendChatMsg('user', text);
+    processUserMessage(text);
+}
+
+function processUserMessage(text) {
+    if (chatState === 'CONFIRM_SEND') {
+        const t = text.toLowerCase();
+        if (t.includes('si') || t.includes('ok') || t.includes('manda') || t.includes('invia') || t === 's') {
+            executeSendToAccountant();
+        } else {
+            chatState = 'IDLE';
+            appendChatMsg('bot', 'Ok, annullato. Posso aiutarti con altro?');
+            chatChips.style.display = 'flex';
+        }
+        return;
+    }
+    const intent = detectIntent(text);
+    if (intent === 'email')       initiateSendToAccountant();
+    else if (intent === 'count')  showReceiptCount();
+    else                          appendChatMsg('bot', 'Non ho capito. Prova a dire "manda email al commercialista" oppure "quanti scontrini ho".');
+}
+
+function detectIntent(text) {
+    const t = text.toLowerCase();
+    const emailWords = ['email', 'commercialista', 'manda', 'invia', 'spedisci', 'mandare', 'inviare'];
+    const countWords = ['quanti', 'conta', 'numero', 'scontrini'];
+    if (emailWords.some(w => t.includes(w))) return 'email';
+    if (countWords.some(w => t.includes(w))) return 'count';
+    return 'unknown';
+}
+
+function showReceiptCount() {
+    const total = uploadHistory.length;
+    const unsent = uploadHistory.filter(e => !e.sent).length;
+    const sent   = total - unsent;
+    appendChatMsg('bot', 'Hai ' + total + ' scontrini salvati: ' + unsent + ' da inviare, ' + sent + ' gia inviati.');
+    chatChips.style.display = 'flex';
+}
+
+function getLastMonthUnsent() {
+    const now = new Date();
+    const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+    return uploadHistory.filter(e => !e.sent && e.ts >= firstOfLastMonth && e.ts < firstOfThisMonth);
+}
+
+function initiateSendToAccountant() {
+    if (!accountantEmail) {
+        appendChatMsg('bot', 'Non ho l\'email del commercialista. Chiedi a chi gestisce l\'app di impostare ?accountant=email@esempio.it nell\'URL.');
+        return;
+    }
+    pendingEmailReceipts = getLastMonthUnsent();
+    if (pendingEmailReceipts.length === 0) {
+        appendChatMsg('bot', 'Non ho trovato scontrini del mese scorso da inviare. Sono stati gia tutti spediti!');
+        chatChips.style.display = 'flex';
+        return;
+    }
+    const names = pendingEmailReceipts.map(e => e.name).join(', ');
+    appendChatMsg('bot', 'Ho trovato ' + pendingEmailReceipts.length + ' scontrini del mese scorso: ' + names + '.\n\nVuoi che prepari l\'email per ' + accountantEmail + '? (Rispondi Si o No)');
+    chatState = 'CONFIRM_SEND';
+}
+
+function executeSendToAccountant() {
+    chatState = 'IDLE';
+    const now = new Date();
+    const monthName = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        .toLocaleString('it-IT', { month: 'long', year: 'numeric' });
+
+    const subject = 'Scontrini ' + monthName;
+    const lines = pendingEmailReceipts.map(e => {
+        const d = new Date(e.ts).toLocaleDateString('it-IT');
+        const link = e.driveFileId ? 'https://drive.google.com/file/d/' + e.driveFileId + '/view' : '(link non disponibile)';
+        return '- ' + e.name + ' (' + d + '): ' + link;
+    });
+    const body = 'Ciao,\n\nti invio i link agli scontrini di ' + monthName + ' salvati su Google Drive:\n\n' + lines.join('\n') + '\n\nA presto!';
+
+    const mailto = 'mailto:' + encodeURIComponent(accountantEmail) +
+        '?subject=' + encodeURIComponent(subject) +
+        '&body=' + encodeURIComponent(body);
+    window.location.href = mailto;
+
+    // Mark receipts as sent
+    pendingEmailReceipts.forEach(e => {
+        const match = uploadHistory.find(h => h.ts === e.ts && h.name === e.name);
+        if (match) { match.sent = true; match.sentTs = Date.now(); }
+    });
+    localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
+    renderHistory();
+
+    appendChatMsg('bot', 'Email aperta! Ho segnato ' + pendingEmailReceipts.length + ' scontrini come "Spediti".');
+    chatChips.style.display = 'flex';
+    pendingEmailReceipts = [];
+}
+
+// Wire chat UI
+if (chatFab)      chatFab.addEventListener('click', openChat);
+if (chatCloseBtn) chatCloseBtn.addEventListener('click', closeChat);
+if (chatSendBtn)  chatSendBtn.addEventListener('click', handleChatSend);
+if (chatInput) {
+    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleChatSend(); });
+}
+if (chatPanel) {
+    chatPanel.addEventListener('click', (e) => { if (e.target === chatPanel) closeChat(); });
+}
+document.querySelectorAll('.chat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        const intent = chip.dataset.intent;
+        chatChips.style.display = 'none';
+        if (intent === 'email')       initiateSendToAccountant();
+        else if (intent === 'count')  showReceiptCount();
+    });
+});
