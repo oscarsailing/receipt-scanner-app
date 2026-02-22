@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Scontrini Papà</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
@@ -10,71 +10,131 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Scontrini">
-    <!-- Load OpenCV.js for lightweight blur detection -->
     <script async src="https://docs.opencv.org/4.8.0/opencv.js" type="text/javascript"></script>
-    <!-- Load Google Identity Services SDK -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-    <div id="app-container">
-        <!-- Screen 0: First Run Setup -->
-        <div id="setup-screen" class="screen">
-            <div class="header">
-                <h1>Configurazione</h1>
-            </div>
-            <div class="content-center">
-                <p style="margin-bottom: 20px;">Inserisci il Client ID di Google per iniziare.</p>
-                <input type="text" id="client-id-input" placeholder="Incolla qui il Client ID" style="width: 90%; padding: 10px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 8px;">
-                <button id="btn-save-config" class="btn-primary">Salva e Inizia</button>
-            </div>
-        </div>
 
-        <!-- Screen 1: Camera / Home -->
+    <!-- SVG Icon Sprite -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+        <symbol id="icon-camera" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 5h-3.17L15 3H9L7.17 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm-8 13a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+        </symbol>
+        <symbol id="icon-check-circle" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </symbol>
+        <symbol id="icon-cloud-upload" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+        </symbol>
+        <symbol id="icon-receipt" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.5 3.5 18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2v14H3v3a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V2l-1.5 1.5zM19 19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-1h14v1zM8 17V5h12v12H8zm5-9H9v2h4V8zm4 4H9v2h8v-2zm0-4h-2v2h2V8z"/>
+        </symbol>
+        <symbol id="icon-wifi-off" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22.99 9C19.15 5.16 13.8 3.76 8.84 4.78L11 6.95c3.24-.4 6.6.6 9.11 3.11L22.99 9zm-4 4c-.96-.96-2.1-1.65-3.33-2.08l1.9 1.9.02-.01L20 14l-1.01-1zM1.41 2 0 3.41l2.52 2.52A9.977 9.977 0 0 0 2 10c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A7.949 7.949 0 0 1 4 10c0-2.04.77-3.9 2.04-5.31L7.5 6.15C6.56 7.22 6 8.64 6 10c0 1.66.67 3.16 1.76 4.25l1.42-1.42A4.005 4.005 0 0 1 8 10c0-.68.16-1.32.44-1.89l1.68 1.68A2.01 2.01 0 0 0 10 10a2 2 0 0 0 2 2c.09 0 .17-.01.25-.02L20.59 20 22 18.59 3.41 2 1.41 2zm18.17 11.24c.01.25.02.5.02.76 0 2.21-1.79 4-4 4H6c-2.76 0-5-2.24-5-5 0-2.25 1.49-4.17 3.54-4.79L3.1 6.77A7 7 0 0 0 0 12c0 3.86 3.14 7 7 7h9c3.27 0 5.99-2.22 6.77-5.23l-2.19-2.19.02.21-.02-.54z"/>
+        </symbol>
+    </svg>
+
+    <div id="app-container">
+
+        <!-- SCREEN 1: CAMERA / HOME -->
         <div id="camera-screen" class="screen active">
-            <div class="header">
-                <h1>Scontrini Papà</h1>
-            </div>
-            
-            <div class="content-center">
-                <!-- Google Login Button (Visible when not logged in) -->
-                <div id="login-container" style="margin-bottom: 20px;">
-                    <button id="btn-login" class="btn-primary" style="padding: 15px 30px; font-size: 18px;">
-                        🔐 Accedi con Google
+
+            <header class="app-bar">
+                <div class="app-bar-inner">
+                    <div class="app-title">
+                        <svg class="icon-title" aria-hidden="true"><use href="#icon-receipt"/></svg>
+                        <span>Scontrini Papà</span>
+                    </div>
+                    <div id="upload-counter" class="counter-pill" style="display:none;" aria-label="Scontrini inviati">
+                        <svg class="icon-xs" aria-hidden="true"><use href="#icon-check-circle"/></svg>
+                        <span id="counter-text">0</span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="camera-main">
+
+                <!-- LOGIN STATE -->
+                <div id="login-section" class="state-card">
+                    <div class="state-icon-wrap state-icon-wrap--blue">
+                        <svg class="state-icon" aria-hidden="true"><use href="#icon-receipt"/></svg>
+                    </div>
+                    <h2 class="state-title">Benvenuto</h2>
+                    <p class="state-desc">Accedi con Google per collegare il tuo Drive e salvare gli scontrini automaticamente.</p>
+                    <button id="btn-login" class="btn-google">
+                        <svg viewBox="0 0 24 24" class="google-logo" aria-hidden="true">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        Accedi con Google
                     </button>
-                    <p id="user-info" style="margin-top: 10px; font-size: 14px; text-align: center; display: none;"></p>
                 </div>
 
-                <label for="camera-input" class="btn-primary massive-btn web-only">
-                    📷 Scatta Foto
-                </label>
-                <input type="file" id="camera-input" accept="image/*" capture="environment">
-            </div>
-        </div>
+                <!-- CAMERA STATE (visible after login) -->
+                <div id="camera-section" class="state-card" style="display:none;">
+                    <div id="offline-banner" class="offline-banner" style="display:none;">
+                        <svg class="icon-xs" aria-hidden="true"><use href="#icon-wifi-off"/></svg>
+                        <span id="offline-text">Offline — foto in coda</span>
+                    </div>
+                    <div id="connected-badge" class="connected-badge">
+                        <svg class="icon-xs" aria-hidden="true"><use href="#icon-check-circle"/></svg>
+                        Drive connesso
+                    </div>
+                    <label for="camera-input" class="btn-camera" role="button">
+                        <svg class="camera-icon" aria-hidden="true"><use href="#icon-camera"/></svg>
+                        <span class="camera-label">Scatta Foto</span>
+                    </label>
+                    <input type="file" id="camera-input" accept="image/*" capture="environment" aria-label="Scatta una foto dello scontrino">
+                    <p class="hint-text">Inquadra lo scontrino con buona luce e tienilo fermo</p>
+                </div>
 
+            </main>
 
+            <!-- Recent Uploads Strip -->
+            <footer id="thumbnail-strip" class="thumbnail-strip" style="display:none;">
+                <p class="strip-label">Inviati di recente</p>
+                <div id="thumbnail-list" class="thumbnail-list" role="list"></div>
+            </footer>
 
-        <!-- Screen 3: Loading -->
+        </div><!-- /camera-screen -->
+
+        <!-- SCREEN 2: LOADING -->
         <div id="loading-screen" class="screen">
-            <div class="content-center">
-                <div class="macos-spinner"></div>
-                <h2>Invio in corso...</h2>
+            <div class="loading-layout">
+                <div id="loading-preview-wrap" class="loading-preview-wrap" style="display:none;">
+                    <img id="loading-preview" class="loading-preview-img" src="" alt="Foto in analisi">
+                </div>
+                <div class="loading-info">
+                    <div class="macos-spinner" role="status" aria-label="Caricamento"></div>
+                    <h2 id="loading-text" class="loading-text">Analisi...</h2>
+                </div>
             </div>
         </div>
 
-        <!-- Screen 4: Success -->
+        <!-- SCREEN 3: SUCCESS -->
         <div id="success-screen" class="screen">
-            <div class="content-center">
-                <div class="success-icon">✅</div>
-                <h2>Fatto! Scontrino Inviato.</h2>
+            <div class="success-layout">
+                <div class="success-thumb-wrap">
+                    <img id="success-preview" class="success-preview-img" src="" alt="Scontrino caricato">
+                    <div class="success-badge">
+                        <svg class="icon-check-xl" aria-label="Salvato con successo"><use href="#icon-check-circle"/></svg>
+                    </div>
+                </div>
+                <h2 class="success-title">Scontrino salvato!</h2>
+                <p class="success-folder">Cartella "Scontrini Papà" su Drive</p>
+                <p id="success-filename" class="success-filename"></p>
             </div>
         </div>
-    </div>
 
-    <!-- macOS Style Alert Modal -->
-    <div id="alert-modal" class="modal-overlay">
-        <div class="macos-alert">
+    </div><!-- /app-container -->
+
+    <!-- Alert Modal -->
+    <div id="alert-modal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="alert-card">
             <h3 id="alert-title">Attenzione</h3>
-            <p id="alert-message">Messaggio di errore.</p>
+            <p id="alert-message">Messaggio.</p>
             <button id="alert-btn" class="btn-primary">OK</button>
         </div>
     </div>
