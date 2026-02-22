@@ -1,85 +1,183 @@
-# Product Requirements Document (PRD): Receipt Scanner App
+# Product Requirements Document (PRD): Scontrini Papà
+
+**Last Updated:** 22 February 2026
+**Status:** In Development — Active
+
+---
 
 ## 1. Overview
-**Product Name:** Receipt Scanner (Working Title)
-**Objective:** To build a simple, efficient Progressive Web Application (PWA) that allows users to capture images of physical receipts and automatically upload them to a designated Google Drive folder.
-**Target Device:** iPhone 6 (Must support iOS 12.x Safari, which is the maximum iOS version supported by iPhone 6).
+**Product Name:** Scontrini Papà
+**Objective:** A simple, robust Progressive Web App (PWA) that allows a user to take a photo of a physical receipt. A local AI model checks the image quality; if acceptable it is automatically uploaded to that user's personal Google Drive. Zero technical knowledge required to use.
+**Deployment:** GitHub Pages (HTTPS), accessible via browser on iOS Safari and installable as a PWA.
+**Target Device:** iPhone 6, iOS 12.x Safari (maximum OS version available on that device).
+
+---
 
 ## 2. Target Audience
-Specifically designed for a non-digitally savvy user (the creator's father). The primary goal is **zero learning curve**. The interface must be foolproof, featuring massive buttons, high contrast, plain Italian instructions, and no hidden menus or complex settings.
+Designed for a single non-technical user (dad). The **primary design constraint is zero learning curve**:
+- All text must be in plain Italian.
+- Buttons must be oversized and labelled clearly.
+- No settings menus, no complex flows, no jargon.
+
+---
 
 ## 3. Design System & UI/UX
-* **Aesthetic:** macOS (OS X) inspired design system.
-* **Principles:** Simple, minimal, and highly legible.
-* **Visuals:** Use classic macOS visual cues—subtle drop shadows, rounded corners, frosted glass (blur) effects for overlays, and a clean, neutral color palette (whites, light grays, and system blue/green/red for primary actions). The UI should feel like a native, stripped-down Apple utility.
+* **Aesthetic:** macOS / OS X inspired — clean, minimal, trustworthy.
+* **Visuals:** Drop shadows, rounded corners, frosted glass overlays, neutral palette (white, light grey, system blue/green/red). Should feel like a stripped-down native Apple utility.
+* **Accessibility:** Extra large tap targets, high contrast, large readable font sizes.
+
+---
 
 ## 4. Key Features & Requirements
 
-### 4.1. Ultra-Simple Camera Interface
-* **Feature:** A full-screen camera view that opens immediately upon app launch.
+### 4.1. First-Run Setup Wizard ✅ Implemented
+* **Feature:** On first launch the app detects that no Google Client ID is stored and shows a one-time setup screen.
 * **Requirements:**
-  * One massive, highly visible "Scatta Foto" (Take Photo) button styled like a classic macOS primary button.
-  * Utilizes HTML5 `<input type="file" accept="image/*" capture="environment">` to directly open the native iOS camera.
-  * Auto-focus and auto-flash are handled natively by the iOS camera app.
+  * Screen title: "Configurazione".
+  * Text field: user pastes their Google Cloud OAuth 2.0 Client ID.
+  * "Salva e Inizia" button saves the ID to `localStorage` and transitions to the camera screen.
+  * **Magic URL:** App accepts `?client_id=<ID>` query parameter on launch. If present, it is automatically saved to `localStorage` and the URL is cleaned. This allows the developer to send a pre-configured link so the user never needs to type anything.
+  * Once saved, the setup screen never appears again on that device.
 
-### 4.2. AI-Driven Automation (No Manual Review)
-* **Feature:** Fully automated quality check and upload process.
+### 4.2. Ultra-Simple Camera Interface ✅ Implemented
+* **Feature:** A camera screen with a single prominent action button.
 * **Requirements:**
-  * **AI Analysis:** Immediately after capture, the local AI checks for blur/darkness.
-  * **Automatic Decision:**
-    * **If Good:** Automatically triggers the upload to Google Drive without user intervention.
-    * **If Bad:** Automatically alerts the user ("Foto sfocata/scura, riprova") and returns to camera.
-  * **Result Feedback:**
-    * **Success:** Displays "Scontrino salvato su Google Drive!" with a success icon.
-    * **Failure:** Displays error message and returns to camera.
+  * One massive "📷 Scatta Foto" button (styled as a primary macOS button).
+  * Uses `<input type="file" accept="image/*" capture="environment">` to invoke the native iOS camera.
+  * "🔐 Accedi con Google" button visible when not yet authenticated; hidden once login is successful.
+  * Connected status shown as "✅ Connesso a Google Drive" beneath the button.
 
-### 4.3. Invisible Google Drive Integration
-* **Feature:** Background uploading that requires zero user management.
+### 4.3. AI-Driven Automated Quality Check ✅ Implemented
+* **Feature:** Immediately after capture, a local AI model assesses the image. No manual review step exists.
 * **Requirements:**
-  * **Authentication:** Zero user authentication required. The app will communicate with a secure backend (e.g., Google Apps Script deployed as a Web App) that has pre-authorized access to the specific Google Drive folder.
-  * **Folder Management:** Hardcoded to upload to a specific "Scontrini Papà" (Dad's Receipts) folder via the backend script. No folder selection UI for the user.
-  * **Upload Mechanism:** Automatic background upload (via `fetch` or `XMLHttpRequest`) upon tapping "Va Bene (Invia)".
-  * **File Naming:** Automatic timestamp naming (e.g., `Scontrino_YYYY-MM-DD_HH-MM-SS.jpg`) handled by the backend.
+  * Loading text shown: "🤖 Analisi foto in corso..."
+  * **Engine:** OpenCV.js (loaded async from CDN `https://docs.opencv.org/4.8.0/opencv.js`), runs fully in-browser.
+  * **Blur check:** Laplacian variance — threshold `50`. Below = blurry.
+  * **Brightness check:** Greyscale mean — threshold `40`. Below = too dark.
+  * **If Bad (blur):** Alert shown — "❌ Foto sfocata — La foto è poco nitida. Prova a tenerla ferma e rifarla." App resets to camera.
+  * **If Bad (dark):** Alert shown — "❌ Foto scura — C'è poca luce. Prova ad accendere una luce o spostarti." App resets to camera.
+  * **If Good:** Upload begins automatically — no user action required.
+  * **OpenCV fallback:** If OpenCV fails to load or throws an error, the app skips the AI check and uploads directly (no silent failure).
 
-### 4.4. Plain Italian Status & Error Handling
-* **Feature:** Clear, non-technical feedback in Italian.
+### 4.4. Automatic Google Drive Upload ✅ Implemented
+* **Feature:** Validated images are uploaded to the user's Google Drive automatically.
 * **Requirements:**
-  * Show a simple "Invio in corso..." (Sending...) screen with a large macOS-style spinner (spinning beach ball or classic progress wheel).
-  * Show a giant "Fatto! Scontrino Inviato." (Success! Receipt Sent.) screen with a checkmark, which automatically returns to the camera after 3 seconds.
-  * **Error Handling:** If it fails, show a macOS-style alert dialog: "Ops, sembra che non ci sia internet. L'abbiamo salvato e riproveremo più tardi." (Uh oh, the internet might be disconnected. We saved it and will try again later.) (Implement basic offline queuing so he doesn't lose receipts if he has no signal).
+  * **Authentication:** Google Identity Services (OAuth 2.0 / `google.accounts.oauth2.initTokenClient`). The user logs in once with "Accedi con Google" per session; the `access_token` is held in memory.
+  * **Upload API:** Google Drive API v3 multipart upload (`/upload/drive/v3/files?uploadType=multipart`).
+  * **File Naming:** `Scontrino_<ISO-timestamp>.jpg` (e.g. `Scontrino_2026-02-22T14-30-00-000Z.jpg`).
+  * **Upload Destination:** Currently uploads to the root of the user's Drive. ⚠️ **GAP — see Section 9.**
+  * **Loading text during upload:** "☁️ Caricamento su Drive..."
+  * **On Success:** "✅ Fatto! Scontrino Inviato." screen shown for 3 seconds, then auto-resets to camera.
+  * **On Error:** Alert shown — "Errore Caricamento — Non sono riuscito a salvare la foto su Drive. Controlla la connessione." App resets to camera.
+  * **Token expiry:** ⚠️ **GAP — see Section 9.** Access tokens expire after ~1 hour with no auto-refresh.
 
-## 5. User Flow
-1. **Launch:** User opens the app and immediately sees the camera.
-2. **Capture:** User taps the giant "Scatta Foto" button.
-3. **AI Check:** The app quickly analyzes the photo for blurriness or darkness.
-   * **If Bad:** App shows "La foto è un po' sfocata o scura. Riprova per favore!" and user taps "Riprova" (goes back to step 1).
-   * **If Good:** App proceeds to Review.
-4. **Review:** User taps the giant green "Va Bene (Invia)" button.
-5. **Processing:** App shows "Invio in corso...".
-6. **Confirmation:** App shows "Fatto!" and goes back to step 1.
-*(Note: Authentication is handled entirely out-of-band by the developer during initial setup).*
+### 4.5. Plain Italian Status & Error Handling ✅ Implemented
+* All user-facing text is in Italian.
+* macOS-style modal alert for errors (title + description + "OK" button).
+* Loading screen with macOS-style CSS spinner.
+* Success screen with oversized ✅ icon.
+
+---
+
+## 5. Current User Flow
+
+```
+App Launch
+    │
+    ├── [First time only] → Setup Screen → Enter Client ID → Save
+    │
+    ▼
+Camera Screen
+    │
+    ├── [Not logged in] → Tap "Accedi con Google" → Google OAuth popup → Logged in
+    │
+    └── [Logged in] → Tap "Scatta Foto" → Native iOS Camera
+                            │
+                            ▼
+                    Loading: "🤖 Analisi foto..."
+                            │
+                    ┌───────┴───────┐
+                    │               │
+                [Bad Photo]     [Good Photo]
+                    │               │
+               Alert + Reset    Loading: "☁️ Caricamento..."
+                                    │
+                            ┌───────┴───────┐
+                            │               │
+                         [Error]        [Success]
+                            │               │
+                       Alert + Reset   Success Screen
+                                           │
+                                    Auto-reset after 3s
+```
+
+---
 
 ## 6. Technical Specifications
-* **Platform:** Progressive Web App (PWA) optimized for iOS Safari.
-* **App Language:** Italian (UI and all user-facing text).
-* **Frontend Stack:** HTML5, CSS3 (macOS styling), Vanilla JavaScript.
-* **Backend Stack:** Google Apps Script (deployed as a Web App) to handle secure, server-side uploading to Google Drive without requiring client-side OAuth.
-* **Minimum Deployment Target:** iOS 12.0 Safari (Crucial for iPhone 6 compatibility).
-* **Third-Party APIs/Libraries:**
-  * OpenCV.js or TensorFlow.js (for lightweight, fully local in-browser image quality analysis).
-* **Required Device Permissions:**
-  * Camera access (requested natively by Safari when using `<input type="file" capture>`).
 
-## 7. Out of Scope (Future Enhancements)
-* OCR (Optical Character Recognition) to extract text/amounts from the receipt.
-* Offline queuing (saving receipts locally when offline and uploading them automatically when the connection is restored).
-* Multi-page receipt scanning.
-* Image cropping and perspective correction (document scanning UI).
+| Property | Value |
+|---|---|
+| Platform | Progressive Web App (PWA) |
+| Language | Italian (all UI text) |
+| Hosting | GitHub Pages (HTTPS) |
+| Frontend Stack | HTML5, CSS3, Vanilla JavaScript (ES6+) |
+| AI Engine | OpenCV.js 4.8.0 (CDN, async loaded, client-side) |
+| Authentication | Google Identity Services (OAuth 2.0 Client-Side Token Flow) |
+| Upload API | Google Drive API v3 (multipart upload) |
+| Client ID Storage | `localStorage` (persists per device/browser) |
+| Minimum Target | iOS 12.0, Safari (iPhone 6) |
+| PWA Manifest | `manifest.json` with name, icons, display mode |
 
-## 8. Milestones
-* **Phase 1:** UI/UX Design & Project Setup.
-* **Phase 2:** Camera implementation and image capture flow.
-* **Phase 3:** Google OAuth integration and Drive API setup.
-* **Phase 4:** Upload functionality and error handling.
-* **Phase 5:** Testing on physical iPhone 6 (iOS 12) and bug fixing.
-* **Phase 6:** App Store submission.
+---
+
+## 7. Repository Structure
+
+```
+receipt-scanner-app/
+├── index.html         # App shell + all screens
+├── app.js             # All logic: setup, auth, AI check, upload
+├── styles.css         # macOS-inspired styling
+├── manifest.json      # PWA manifest
+├── icon-192.png       # App icon (required for PWA install)
+├── PRD.md             # This document
+├── google_drive_setup.md  # Google Cloud setup instructions
+└── README.md
+```
+
+---
+
+## 8. Deployment
+The app is deployed via **GitHub Pages** from the `main` branch.
+
+**To redeploy after changes:**
+1. Commit and push changes to `main`.
+2. GitHub Actions automatically rebuilds Pages (usually within 60 seconds).
+3. Visit `https://<username>.github.io/<repo>/` to confirm.
+
+**To configure for a new device (Magic URL):**
+```
+https://<username>.github.io/<repo>/?client_id=<YOUR_GOOGLE_CLIENT_ID>
+```
+Open this link on the target device once. The ID is saved to `localStorage` permanently.
+
+---
+
+## 9. Known Gaps & Open Issues
+
+| # | Gap | Impact | Priority |
+|---|---|---|---|
+| G-1 | **Upload destination is Drive root**, not a dedicated "Scontrini Papà" folder. Receipts are hard to find. | Medium | High |
+| G-2 | **OAuth token expires after ~1 hour** with no auto-refresh. User gets "Non Connesso" error mid-session with no clear prompt to re-login. | High | High |
+| G-3 | **No offline queuing.** If the user has no internet, the receipt is lost — no retry mechanism. | Medium | Medium |
+| G-4 | **OpenCV.js CDN dependency.** If the CDN is slow or unavailable, the AI check is skipped silently (upload proceeds but no quality gate). | Low | Low |
+| G-5 | **No app icon (`icon-192.png`) confirmed in repo.** PWA install on iOS may show a blank icon. | Low | Medium |
+
+---
+
+## 10. Out of Scope (Future Enhancements)
+* OCR to extract vendor name, date, or total amount from the receipt.
+* Multi-page / multi-shot receipt scanning.
+* Image cropping and perspective correction (document-scanner style UI).
+* Offline queue (save locally when offline, auto-upload when reconnected).
+* Push notifications to confirm uploads succeeded.
+* Admin view to browse uploaded receipts from within the app.
