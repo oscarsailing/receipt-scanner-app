@@ -9,6 +9,8 @@ const CLIENT_ID   = localStorage.getItem('google_client_id') || '103872449955-ma
 const SCOPES      = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'Scontrini Papà';
 const MAX_HISTORY = 20; // max thumbnails stored in localStorage
+// Redirect URI must match exactly what is registered in Google Cloud Console
+const REDIRECT_URI = 'https://oscarsailing.github.io/receipt-scanner-app/';
 
 // ── DOM REFS ─────────────────────────────────────────────────────────────────
 const btnLogin          = document.getElementById('btn-login');
@@ -42,7 +44,6 @@ const alertMessageEl    = document.getElementById('alert-message');
 const alertBtn          = document.getElementById('alert-btn');
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let tokenClient   = null;
 let accessToken   = null;
 let tokenExpiry   = 0;       // epoch ms when token expires
 let driveFolderId = localStorage.getItem('drive_folder_id') || null;
@@ -78,66 +79,53 @@ window.addEventListener('load', () => {
     if (params.get('client_id')) {
         localStorage.setItem('google_client_id', params.get('client_id'));
         window.history.replaceState({}, document.title, window.location.pathname);
-        window.location.reload(); // reload so CLIENT_ID picks it up
+        window.location.reload();
         return;
+    }
+
+    // ── G-2: Parse OAuth token from URL hash (returned after redirect login) ──
+    // Google returns: #access_token=TOKEN&expires_in=3600&...
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+        const hashParams = new URLSearchParams(hash.substring(1));
+        const token = hashParams.get('access_token');
+        const expiresIn = parseInt(hashParams.get('expires_in') || '3600', 10);
+        if (token) {
+            accessToken = token;
+            tokenExpiry = Date.now() + (expiresIn - 300) * 1000;
+            // Clean the token from the URL so it's not visible or bookmarked
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
     }
 
     renderHistory();
     updateCounterUI();
     updateQueueBadge();
 
-    // Try to init Google client (it may not be loaded yet if async)
-    tryInitClient();
+    // Show correct UI state
+    if (accessToken) {
+        showCameraUI();
+        if (offlineQueue.length > 0) flushOfflineQueue();
+    }
 
     // Offline / online listeners (G-3)
     window.addEventListener('online',  onNetworkOnline);
     window.addEventListener('offline', () => updateQueueBadge());
 });
 
-function tryInitClient() {
-    if (typeof google !== 'undefined' && google.accounts) {
-        initClient();
-    } else {
-        // SDK hasn't loaded yet — retry in 500ms
-        setTimeout(tryInitClient, 500);
-    }
+// Build Google OAuth URL and redirect the whole page to it.
+// Works on iOS Safari in PWA/standalone mode. No popups needed.
+function startGoogleLogin() {
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id',     CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri',  REDIRECT_URI);
+    authUrl.searchParams.set('response_type', 'token');
+    authUrl.searchParams.set('scope',         SCOPES);
+    authUrl.searchParams.set('prompt',        'select_account');
+    window.location.href = authUrl.toString();
 }
 
-function initClient() {
-    if (!CLIENT_ID || CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
-        console.warn('[Scontrini] No Google Client ID configured. Set it via ?client_id= URL param.');
-        return;
-    }
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: onTokenReceived,
-    });
-}
-
-function onTokenReceived(tokenResponse) {
-    if (tokenResponse.error) {
-        showAlert('Errore Login', 'Non è stato possibile accedere con Google. Riprova.');
-        return;
-    }
-    accessToken = tokenResponse.access_token;
-    // expires_in is in seconds; subtract 5 min as a safety buffer
-    tokenExpiry = Date.now() + (tokenResponse.expires_in - 300) * 1000;
-
-    showCameraUI();
-    // If there are queued photos waiting, attempt to flush them now
-    if (offlineQueue.length > 0) flushOfflineQueue();
-}
-
-btnLogin.addEventListener('click', () => {
-    if (!tokenClient) {
-        // SDK still loading or no Client ID
-        showAlert('Configurazione', 'Il sistema sta ancora caricando. Riprova tra un momento.');
-        tryInitClient();
-        return;
-    }
-    tokenClient.requestAccessToken({ prompt: '' });
-});
+btnLogin.addEventListener('click', startGoogleLogin);
 
 // =============================================================================
 // UI STATE HELPERS
@@ -305,25 +293,24 @@ function saveQueue() {
     localStorage.setItem('offline_queue', JSON.stringify(offlineQueue));
 }
 
-// =============================================================================
-// G-2: TOKEN EXPIRY REFRESH
-// =============================================================================
+// ── G-2: TOKEN EXPIRY CHECK ──────────────────────────────────────────────────
+// With redirect flow, token refresh means sending the user through login again.
+// We use prompt=none to attempt a silent re-auth first (no UI if session active).
 async function ensureValidToken() {
     if (!accessToken) throw new Error('NO_TOKEN');
-    // If token expires in less than 5 min, request a fresh one first
     if (Date.now() > tokenExpiry) {
-        console.log('[Auth] Token expired — requesting refresh');
-        await new Promise((resolve, reject) => {
-            const originalCallback = tokenClient.callback;
-            tokenClient.callback = (res) => {
-                tokenClient.callback = originalCallback;
-                if (res.error) { reject(new Error(res.error)); return; }
-                accessToken  = res.access_token;
-                tokenExpiry  = Date.now() + (res.expires_in - 300) * 1000;
-                resolve();
-            };
-            tokenClient.requestAccessToken({ prompt: '' });
-        });
+        console.log('[Auth] Token expired — attempting silent refresh');
+        // Try silent re-auth: if Google session is still active, this returns
+        // immediately with a new token without showing any UI.
+        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+        authUrl.searchParams.set('client_id',     CLIENT_ID);
+        authUrl.searchParams.set('redirect_uri',  REDIRECT_URI);
+        authUrl.searchParams.set('response_type', 'token');
+        authUrl.searchParams.set('scope',         SCOPES);
+        authUrl.searchParams.set('prompt',        'none');
+        window.location.href = authUrl.toString();
+        // Execution stops here; page will reload with new token in hash
+        await new Promise(() => {}); // never resolves — redirect is in progress
     }
 }
 
@@ -422,8 +409,8 @@ async function uploadToGoogleDrive(file, imageUrl, opts = {}) {
         console.error('[Upload] Error:', err);
 
         if (err.message === 'NO_TOKEN') {
-            showAlert('Sessione scaduta', 'Tocca "Accedi con Google" per riconnetterti.');
-            showCameraLoggedOutUI();
+            // Token missing — send user through login again
+            startGoogleLogin(); return;
         } else {
             showAlert('Errore invio', 'Non riesco a salvare su Drive. Controlla la connessione e riprova.');
         }
