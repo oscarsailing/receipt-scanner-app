@@ -8,6 +8,11 @@
 const CLIENT_ID   = localStorage.getItem('google_client_id') || '103872449955-maa3ttpalvbp2nqnuqmspm4v5f30o1at.apps.googleusercontent.com';
 const SCOPES      = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'Scontrini Papà';
+const MESI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const USERS = [
+    { id: 'papa',    label: 'I miei scontrini',  short: 'Papà',    suffix: 'Papà'    },
+    { id: 'tiziana', label: 'Scontrini Tiziana',  short: 'Tiziana', suffix: 'Tiziana' },
+];
 const MAX_HISTORY = 40; // max thumbnails stored in localStorage
 // Redirect URI must match exactly what is registered in Google Cloud Console
 const REDIRECT_URI = 'https://oscarsailing.github.io/receipt-scanner-app/';
@@ -56,6 +61,15 @@ const receiptCancelDeleteBtn= document.getElementById('receipt-canceldelete-btn'
 const receiptActionsNormal  = document.getElementById('receipt-actions-normal');
 const receiptActionsConfirm = document.getElementById('receipt-actions-confirm');
 
+// Screen refs
+const selectScreen      = document.getElementById('select-screen');
+const userContextBar    = document.getElementById('user-context-bar');
+const userContextLabel  = document.getElementById('user-context-label');
+const btnBackToSelect   = document.getElementById('btn-back-to-select');
+const userCountPapa     = document.getElementById('user-count-papa');
+const userCountTiziana  = document.getElementById('user-count-tiziana');
+const successFolderEl   = document.getElementById('success-folder');
+
 // Chat
 const chatFab     = document.getElementById('chat-fab');
 
@@ -73,8 +87,8 @@ let uploadHistory = JSON.parse(localStorage.getItem('upload_history') || '[]');
 // Receipt viewer state
 let viewingIndex = -1;
 
-// Accountant email (set via ?accountant= URL param)
-let accountantEmail = localStorage.getItem('accountant_email') || '';
+// Active user context (set when tapping a user card)
+let activeUser = null; // one of USERS items
 
 // =============================================================================
 // NAVIGATION
@@ -125,13 +139,6 @@ window.addEventListener('load', () => {
         return;
     }
 
-    // Allow setting accountant email via ?accountant= param
-    if (params.get('accountant')) {
-        accountantEmail = params.get('accountant');
-        localStorage.setItem('accountant_email', accountantEmail);
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
     // ── G-2: Parse OAuth token from URL hash (returned after redirect login) ──
     // Google returns: #access_token=TOKEN&expires_in=3600&...
     const hash = window.location.hash;
@@ -154,7 +161,7 @@ window.addEventListener('load', () => {
 
     // Show correct UI state
     if (accessToken) {
-        showCameraUI();
+        showSelectScreen();
         if (offlineQueue.length > 0) flushOfflineQueue();
     }
 
@@ -180,11 +187,31 @@ btnLogin.addEventListener('click', startGoogleLogin);
 // =============================================================================
 // UI STATE HELPERS
 // =============================================================================
-function showCameraUI() {
+function showSelectScreen() {
     loginSection.style.display = 'none';
-    cameraSection.style.display = 'flex';
+    cameraSection.style.display = 'none';
+    if (userContextBar) userContextBar.style.display = 'none';
     if (chatFab) chatFab.style.display = 'flex';
+    updateUserCardCounts();
+    showScreen(selectScreen);
 }
+
+function selectUser(userId) {
+    activeUser = USERS.find(function(u) { return u.id === userId; }) || USERS[0];
+    if (userContextLabel) userContextLabel.textContent = activeUser.label;
+    if (userContextBar) userContextBar.style.display = 'flex';
+    cameraSection.style.display = 'flex';
+    showScreen(cameraScreen);
+}
+
+if (btnBackToSelect) btnBackToSelect.addEventListener('click', function() {
+    activeUser = null;
+    showSelectScreen();
+});
+
+document.querySelectorAll('.user-card').forEach(function(card) {
+    card.addEventListener('click', function() { selectUser(card.dataset.user); });
+});
 
 function updateCounterUI() {
     const count = uploadHistory.length;
@@ -198,10 +225,10 @@ function updateCounterUI() {
 
 function updateQueueBadge() {
     if (offlineQueue.length > 0 && !navigator.onLine) {
-        offlineText.textContent = `Offline — ${offlineQueue.length} foto in coda`;
+        offlineText.textContent = 'Offline — ' + offlineQueue.length + ' foto in coda';
         offlineBanner.style.display = 'flex';
     } else if (offlineQueue.length > 0 && navigator.onLine) {
-        offlineText.textContent = `${offlineQueue.length} foto in coda da inviare…`;
+        offlineText.textContent = offlineQueue.length + ' foto in coda da inviare…';
         offlineBanner.style.display = 'flex';
     } else {
         offlineBanner.style.display = 'none';
@@ -309,11 +336,11 @@ async function routeUpload(file, imageUrl) {
         // Queue for later
         setLoadingText('Offline — foto salvata in coda');
         const dataUrl = await fileToDataUrl(file);
-        offlineQueue.push({ dataUrl, mimeType: file.type, timestamp: Date.now() });
+        offlineQueue.push({ dataUrl: dataUrl, mimeType: file.type, timestamp: Date.now(), userId: activeUser ? activeUser.id : 'papa' });
         saveQueue();
         updateQueueBadge();
-        setTimeout(() => {
-            showAlert('Offline', `Nessuna connessione. La foto è stata salvata (${offlineQueue.length} in coda). Verrà inviata appena torni online.`);
+        setTimeout(function() {
+            showAlert('Offline', 'Nessuna connessione. La foto è stata salvata (' + offlineQueue.length + ' in coda). Verrà inviata appena torni online.');
             resetApp();
         }, 800);
         return;
@@ -332,8 +359,10 @@ async function flushOfflineQueue() {
     // Process one at a time to avoid rate limiting
     while (offlineQueue.length > 0) {
         const item = offlineQueue[0];
+        // Restore user context for this queued item
+        if (item.userId) activeUser = USERS.find(function(u) { return u.id === item.userId; }) || USERS[0];
         try {
-            setLoadingText(`☁️ Invio foto in coda (${offlineQueue.length} rimaste)…`);
+            setLoadingText('\u2601\ufe0f Invio foto in coda (' + offlineQueue.length + ' rimaste)\u2026');
             showScreen(loadingScreen);
             loadingPreviewWrap.style.display = 'block';
             loadingPreview.src = item.dataUrl;
@@ -350,7 +379,7 @@ async function flushOfflineQueue() {
         }
     }
     if (offlineQueue.length === 0) {
-        showScreen(cameraScreen);
+        showSelectScreen();
     }
 }
 
@@ -382,16 +411,28 @@ async function ensureValidToken() {
 }
 
 // =============================================================================
-// G-1: FIND OR CREATE "SCONTRINI PAPÀ" FOLDER
+// MONTH HELPERS
+// =============================================================================
+function getMonthKey(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    return y + '-' + m;
+}
+
+function getMonthFolderName(userSuffix, d) {
+    return MESI_IT[d.getMonth()] + ' ' + d.getFullYear() + ' \u2013 ' + userSuffix;
+}
+
+// =============================================================================
+// G-1: FIND OR CREATE "SCONTRINI PAPÀ" ROOT FOLDER
 // =============================================================================
 async function getOrCreateFolder() {
-    // Use cached folder ID if available
     if (driveFolderId) return driveFolderId;
 
-    // Search for existing folder
+    const q = 'name%3D%27' + encodeURIComponent(FOLDER_NAME) + '%27%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse';
     const searchRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=name%3D'${encodeURIComponent(FOLDER_NAME)}'%20and%20mimeType%3D'application%2Fvnd.google-apps.folder'%20and%20trashed%3Dfalse&fields=files(id%2Cname)`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id%2Cname)',
+        { headers: { Authorization: 'Bearer ' + accessToken } }
     );
     if (!searchRes.ok) throw new Error('Folder search failed: ' + searchRes.status);
     const searchData = await searchRes.json();
@@ -399,17 +440,10 @@ async function getOrCreateFolder() {
     if (searchData.files && searchData.files.length > 0) {
         driveFolderId = searchData.files[0].id;
     } else {
-        // Create the folder
         const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
             method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                name: FOLDER_NAME,
-                mimeType: 'application/vnd.google-apps.folder',
-            }),
+            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
         });
         if (!createRes.ok) throw new Error('Folder creation failed: ' + createRes.status);
         const createData = await createRes.json();
@@ -422,29 +456,79 @@ async function getOrCreateFolder() {
 }
 
 // =============================================================================
+// PER-USER PER-MONTH SUBFOLDER
+// =============================================================================
+async function getOrCreateMonthlyFolder(userId, userSuffix) {
+    var now = new Date();
+    var monthKey = getMonthKey(now);
+    var cacheKey = 'folder_' + userId + '_' + monthKey;
+    var cached = localStorage.getItem(cacheKey);
+    if (cached) return cached;
+
+    var rootId = await getOrCreateFolder();
+    var folderName = getMonthFolderName(userSuffix, now);
+
+    // Search inside root folder
+    var qParts = [
+        "name='" + folderName.replace(/'/g, "\\'") + "'",
+        "'" + rootId + "' in parents",
+        "mimeType='application/vnd.google-apps.folder'",
+        'trashed=false'
+    ];
+    var searchRes = await fetch(
+        'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(qParts.join(' and ')) + '&fields=files(id,name)',
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+    );
+    if (!searchRes.ok) throw new Error('Monthly folder search failed: ' + searchRes.status);
+    var sd = await searchRes.json();
+
+    var folderId;
+    if (sd.files && sd.files.length > 0) {
+        folderId = sd.files[0].id;
+    } else {
+        var createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [rootId] }),
+        });
+        if (!createRes.ok) throw new Error('Monthly folder creation failed: ' + createRes.status);
+        var cd = await createRes.json();
+        folderId = cd.id;
+    }
+
+    localStorage.setItem(cacheKey, folderId);
+    console.log('[Drive] Monthly folder: ' + folderName + ' id=' + folderId);
+    return folderId;
+}
+
+
+
+// =============================================================================
 // UPLOAD
 // =============================================================================
-async function uploadToGoogleDrive(file, imageUrl, opts = {}) {
-    setLoadingText('☁️ Caricamento su Drive…');
+async function uploadToGoogleDrive(file, imageUrl, opts) {
+    opts = opts || {};
+    var user = activeUser || USERS[0];
+    setLoadingText('\u2601\ufe0f Caricamento su Drive\u2026');
 
     try {
-        await ensureValidToken();           // G-2: refresh if needed
-        const folderId = await getOrCreateFolder(); // G-1: find/create folder
+        await ensureValidToken();
+        var folderId = await getOrCreateMonthlyFolder(user.id, user.suffix);
 
-        const dateStr  = new Date().toISOString().replace(/[:.]/g, '-');
-        const fileName = `Scontrino_${dateStr}.jpg`;
+        var dateStr  = new Date().toISOString().replace(/[:.]/g, '-');
+        var fileName = 'Scontrino_' + dateStr + '.jpg';
 
-        const metadata = {
+        var metadata = {
             name: fileName,
             mimeType: file.type || 'image/jpeg',
-            parents: [folderId],            // G-1: upload into folder
+            parents: [folderId],
         };
 
-        const form = new FormData();
+        var form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
         form.append('file', file);
 
-        const response = await fetch(
+        var response = await fetch(
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             {
                 method: 'POST',
@@ -454,39 +538,52 @@ async function uploadToGoogleDrive(file, imageUrl, opts = {}) {
         );
 
         if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(`Drive API ${response.status}: ${errBody}`);
+            var errBody = await response.text();
+            throw new Error('Drive API ' + response.status + ': ' + errBody);
         }
 
-        const data = await response.json();
-        console.log('[Upload] Success, file ID:', data.id);
+        var data = await response.json();
+        console.log('[Upload] Success, file ID:', data.id, 'folder:', folderId);
 
         // Persist to history
-        const thumb = await makeThumb(imageUrl);
-        addToHistory({ thumbDataUrl: thumb, name: fileName, ts: Date.now(), driveFileId: data.id, sent: false, sentTs: null });
+        var thumb = await makeThumb(imageUrl);
+        var now = new Date();
+        addToHistory({
+            thumbDataUrl: thumb,
+            name: fileName,
+            ts: now.getTime(),
+            driveFileId: data.id,
+            driveFolderId: folderId,
+            userName: user.short,
+            userId: user.id,
+            monthKey: getMonthKey(now),
+            sent: false,
+            sentTs: null
+        });
 
         // Show success screen
         successPreview.src = imageUrl;
         successFilename.textContent = fileName;
+        if (successFolderEl) {
+            successFolderEl.textContent = getMonthFolderName(user.suffix, now) + ' su Drive';
+        }
         showScreen(successScreen);
 
         // Auto-return after 3s
-        setTimeout(() => resetApp(), 3000);
+        setTimeout(function() { resetApp(); }, 3000);
 
     } catch (err) {
         console.error('[Upload] Error:', err);
-
         if (err.message === 'NO_TOKEN') {
-            // Token missing — send user through login again
             startGoogleLogin(); return;
         } else {
             showAlert('Errore invio', 'Non riesco a salvare su Drive. Controlla la connessione e riprova.');
         }
-
         if (!opts.fromQueue) resetApp();
-        throw err; // re-throw so queue flush can detect failure
+        throw err;
     }
 }
+
 
 // =============================================================================
 // HISTORY / THUMBNAILS
@@ -497,6 +594,7 @@ function addToHistory(entry) {
     localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
     updateCounterUI();
     renderHistory();
+    updateUserCardCounts();
 }
 
 function renderHistory() {
@@ -507,32 +605,50 @@ function renderHistory() {
     }
     thumbnailStrip.style.display = 'block';
     updateDriveLink();
-    uploadHistory.forEach((entry, idx) => {
-        const item = document.createElement('div');
+    uploadHistory.forEach(function(entry, idx) {
+        var item = document.createElement('div');
         item.className = 'thumbnail-item';
         item.setAttribute('role', 'listitem');
         item.title = entry.name;
 
-        const img = document.createElement('img');
+        var img = document.createElement('img');
         img.src = entry.thumbDataUrl;
         img.alt = entry.name;
-
-        const badge = document.createElement('div');
-        badge.className = 'thumbnail-check';
-        badge.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-check-circle"/></svg>';
-
         item.appendChild(img);
-        item.appendChild(badge);
+
+        if (entry.userName) {
+            var userBadge = document.createElement('div');
+            userBadge.className = 'thumbnail-user';
+            userBadge.textContent = entry.userName;
+            item.appendChild(userBadge);
+        }
+
+        var checkBadge = document.createElement('div');
+        checkBadge.className = 'thumbnail-check';
+        checkBadge.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-check-circle"/></svg>';
+        item.appendChild(checkBadge);
 
         if (entry.sent) {
-            const sentBadge = document.createElement('div');
+            var sentBadge = document.createElement('div');
             sentBadge.className = 'thumbnail-sent';
             sentBadge.textContent = 'SPEDITO';
             item.appendChild(sentBadge);
         }
 
-        item.addEventListener('click', () => openReceiptViewer(idx));
+        item.addEventListener('click', function() { openReceiptViewer(idx); });
         thumbnailList.appendChild(item);
+    });
+}
+
+function updateUserCardCounts() {
+    var now = new Date();
+    var thisMonthKey = getMonthKey(now);
+    USERS.forEach(function(user) {
+        var count = uploadHistory.filter(function(e) {
+            return e.userId === user.id && e.monthKey === thisMonthKey;
+        }).length;
+        var el = document.getElementById('user-count-' + user.id);
+        if (el) el.textContent = count > 0 ? count + ' questo mese' : '0 questo mese';
     });
 }
 
@@ -564,13 +680,14 @@ function resetApp() {
     cameraInput.value = '';
     loadingPreviewWrap.style.display = 'none';
     loadingPreview.src = '';
-    showScreen(cameraScreen);
-}
-
-function showCameraLoggedOutUI() {
-    loginSection.style.display = 'flex';
-    cameraSection.style.display = 'none';
-    showScreen(cameraScreen);
+    activeUser = null;
+    if (accessToken) {
+        showSelectScreen();
+    } else {
+        loginSection.style.display = 'flex';
+        cameraSection.style.display = 'none';
+        showScreen(cameraScreen);
+    }
 }
 
 function fileToDataUrl(file) {
@@ -657,55 +774,52 @@ if (receiptModal) receiptModal.addEventListener('click', (e) => {
 // =============================================================================
 // ACCOUNTANT BUTTON — one-tap email flow
 // =============================================================================
-function getLastMonthUnsent() {
-    const now = new Date();
-    const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-    return uploadHistory.filter(e => !e.sent && e.ts >= firstOfLastMonth && e.ts < firstOfThisMonth);
-}
-
 function sendToAccountantFlow() {
-    if (!accountantEmail) {
-        showAlert('Nessun commercialista', 'Chiedi a chi gestisce l\'app di impostare ?accountant=email@esempio.it nell\'URL.');
+    var now = new Date();
+    var lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var lastMonthKey = getMonthKey(lastMonth);
+    var monthName = MESI_IT[lastMonth.getMonth()] + ' ' + lastMonth.getFullYear();
+
+    var papaFolderId = localStorage.getItem('folder_papa_' + lastMonthKey);
+    var tizFolderId = localStorage.getItem('folder_tiziana_' + lastMonthKey);
+
+    var papaCount = uploadHistory.filter(function(e) { return e.userId === 'papa' && e.monthKey === lastMonthKey; }).length;
+    var tizCount = uploadHistory.filter(function(e) { return e.userId === 'tiziana' && e.monthKey === lastMonthKey; }).length;
+
+    if (!papaFolderId && !tizFolderId) {
+        showAlert('Niente da inviare', 'Non ci sono scontrini di ' + monthName + ' su Drive.');
         return;
     }
-    const receipts = getLastMonthUnsent();
-    const now = new Date();
-    const monthName = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        .toLocaleString('it-IT', { month: 'long', year: 'numeric' });
 
-    if (receipts.length === 0) {
-        showAlert('Niente da inviare', 'Non ci sono scontrini di ' + monthName + ' da inviare. Sono stati gia tutti spediti!');
-        return;
+    var summaryParts = [];
+    if (papaCount > 0) summaryParts.push(papaCount + ' scontrini di Pap\u00e0');
+    if (tizCount > 0) summaryParts.push(tizCount + ' scontrini di Tiziana');
+    var summary = summaryParts.length > 0 ? summaryParts.join(' e ') : 'Cartelle presenti';
+
+    if (alertBtnOverride) {
+        alertBtnOverride._overrideFn = function() {
+            executeSendToAccountant(papaFolderId, tizFolderId, monthName, lastMonthKey);
+        };
     }
-
-    // Use the alert modal: OK = annulla, override button = "Invia email"
-    if (alertBtnOverride) alertBtnOverride._overrideFn = () => executeSendToAccountant(receipts, monthName);
-    showAlert(
-        'Invia al commercialista',
-        'Trovati ' + receipts.length + ' scontrini di ' + monthName + ' da inviare a ' + accountantEmail + '.',
-        'Invia email'
-    );
+    showAlert('Invia al commercialista', summary + ' di ' + monthName + '. Preparo l\'email?', 'Prepara email');
 }
 
-function executeSendToAccountant(receipts, monthName) {
-    const subject = 'Scontrini ' + monthName;
-    const lines = receipts.map(e => {
-        const d = new Date(e.ts).toLocaleDateString('it-IT');
-        const link = e.driveFileId ? 'https://drive.google.com/file/d/' + e.driveFileId + '/view' : '(link non disponibile)';
-        return '- ' + e.name + ' (' + d + '): ' + link;
-    });
-    const body = 'Ciao,\n\nti invio i link agli scontrini di ' + monthName + ' salvati su Google Drive:\n\n' + lines.join('\n') + '\n\nA presto!';
-
-    const mailto = 'mailto:' + encodeURIComponent(accountantEmail) +
-        '?subject=' + encodeURIComponent(subject) +
-        '&body=' + encodeURIComponent(body);
+function executeSendToAccountant(papaFolderId, tizFolderId, monthName, lastMonthKey) {
+    var subject = 'Scontrini ' + monthName + ' \u2013 Pap\u00e0 e Tiziana';
+    var bodyParts = ['Ciao,\n\nti mando i link alle cartelle degli scontrini di ' + monthName + ' su Google Drive:\n'];
+    if (papaFolderId) {
+        bodyParts.push('\ud83d\udcc1 I miei scontrini:\nhttps://drive.google.com/drive/folders/' + papaFolderId + '\n');
+    }
+    if (tizFolderId) {
+        bodyParts.push('\ud83d\udcc1 Scontrini Tiziana:\nhttps://drive.google.com/drive/folders/' + tizFolderId + '\n');
+    }
+    bodyParts.push('\nA presto!');
+    var body = bodyParts.join('\n');
+    var mailto = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
     window.location.href = mailto;
 
-    // Mark receipts as sent
-    receipts.forEach(e => {
-        const match = uploadHistory.find(h => h.ts === e.ts && h.name === e.name);
-        if (match) { match.sent = true; match.sentTs = Date.now(); }
+    uploadHistory.forEach(function(e) {
+        if (e.monthKey === lastMonthKey) { e.sent = true; e.sentTs = Date.now(); }
     });
     localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
     renderHistory();

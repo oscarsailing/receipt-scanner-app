@@ -777,3 +777,117 @@ body {
     white-space: nowrap;
 }
 .chat-fab:active { transform: scale(0.95); }
+
+/* =============================================================================
+   USER SELECT SCREEN
+   ============================================================================= */
+.select-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px 16px;
+    gap: 8px;
+}
+
+.select-prompt {
+    font-size: 15px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.user-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    max-width: 320px;
+}
+
+.user-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 28px 20px 22px;
+    background: var(--bg-card);
+    border: none;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    font-family: var(--font);
+    -webkit-appearance: none;
+    transition: transform 0.12s ease;
+    width: 100%;
+    color: var(--text-primary);
+}
+.user-card:active { transform: scale(0.97); }
+.user-card svg { color: var(--blue); }
+
+.user-card-label {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+.user-card-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    min-height: 18px;
+}
+
+/* =============================================================================
+   USER CONTEXT BAR (camera screen header)
+   ============================================================================= */
+.user-context-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px 8px;
+    background: var(--bg);
+    border-bottom: 0.5px solid var(--separator);
+    flex-shrink: 0;
+}
+
+.btn-back {
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--blue);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+}
+.btn-back:active { opacity: 0.6; }
+
+.user-context-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+    text-align: right;
+}
+
+/* User name badge on thumbnail */
+.thumbnail-user {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.48);
+    color: white;
+    font-size: 8px;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.3px;
+    padding: 2px 0;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+}
+

@@ -49,9 +49,8 @@
 
     <div id="app-container">
 
-        <!-- SCREEN 1: CAMERA / HOME -->
-        <div id="camera-screen" class="screen active">
-
+        <!-- SCREEN 0: USER SELECT (home after login) -->
+        <div id="select-screen" class="screen">
             <header class="app-bar">
                 <div class="app-bar-inner">
                     <div class="app-title">
@@ -64,6 +63,44 @@
                     </div>
                 </div>
             </header>
+
+            <main class="select-main">
+                <p class="select-prompt">Di chi è questo scontrino?</p>
+                <div class="user-cards">
+                    <button class="user-card" data-user="papa" aria-label="Scansiona scontrino per Papà">
+                        <svg width="40" height="40" aria-hidden="true"><use href="#icon-camera"/></svg>
+                        <span class="user-card-label">I miei scontrini</span>
+                        <span class="user-card-sub" id="user-count-papa"></span>
+                    </button>
+                    <button class="user-card" data-user="tiziana" aria-label="Scansiona scontrino per Tiziana">
+                        <svg width="40" height="40" aria-hidden="true"><use href="#icon-camera"/></svg>
+                        <span class="user-card-label">Scontrini Tiziana</span>
+                        <span class="user-card-sub" id="user-count-tiziana"></span>
+                    </button>
+                </div>
+            </main>
+
+            <!-- Recent Uploads Strip -->
+            <footer id="thumbnail-strip" class="thumbnail-strip" style="display:none;">
+                <div class="strip-header">
+                    <p class="strip-label">Inviati di recente</p>
+                    <a id="btn-open-drive" class="strip-drive-link" target="_blank" rel="noopener noreferrer" style="display:none;" aria-label="Apri cartella Drive">
+                        <svg class="icon-xs" aria-hidden="true"><use href="#icon-folder"/></svg>
+                        Apri Drive
+                    </a>
+                </div>
+                <div id="thumbnail-list" class="thumbnail-list" role="list"></div>
+            </footer>
+        </div><!-- /select-screen -->
+
+        <!-- SCREEN 1: CAMERA -->
+        <div id="camera-screen" class="screen active">
+
+            <!-- User context bar (shown when a user is selected) -->
+            <div id="user-context-bar" class="user-context-bar" style="display:none;">
+                <button id="btn-back-to-select" class="btn-back" aria-label="Torna alla selezione">← Indietro</button>
+                <span id="user-context-label" class="user-context-label"></span>
+            </div>
 
             <main class="camera-main">
 
@@ -105,18 +142,6 @@
 
             </main>
 
-            <!-- Recent Uploads Strip -->
-            <footer id="thumbnail-strip" class="thumbnail-strip" style="display:none;">
-                <div class="strip-header">
-                    <p class="strip-label">Inviati di recente</p>
-                    <a id="btn-open-drive" class="strip-drive-link" target="_blank" rel="noopener noreferrer" style="display:none;" aria-label="Apri cartella Drive">
-                        <svg class="icon-xs" aria-hidden="true"><use href="#icon-folder"/></svg>
-                        Apri Drive
-                    </a>
-                </div>
-                <div id="thumbnail-list" class="thumbnail-list" role="list"></div>
-            </footer>
-
         </div><!-- /camera-screen -->
 
         <!-- SCREEN 2: LOADING -->
@@ -142,7 +167,7 @@
                     </div>
                 </div>
                 <h2 class="success-title">Scontrino salvato!</h2>
-                <p class="success-folder">Cartella "Scontrini Papà" su Drive</p>
+                <p id="success-folder" class="success-folder"></p>
                 <p id="success-filename" class="success-filename"></p>
             </div>
         </div>
@@ -190,7 +215,6 @@
         <svg width="18" height="18" aria-hidden="true"><use href="#icon-send"/></svg>
         <span>Commercialista</span>
     </button>
-    </div>
 
     <script src="app.js"></script>
 </body>
