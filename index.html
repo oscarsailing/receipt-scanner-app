@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scontrini Papà</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Scontrini">
+    <!-- Load OpenCV.js for lightweight blur detection -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" type="text/javascript"></script>
+</head>
+<body>
+    <div id="app-container">
+        <!-- Screen 1: Camera / Home -->
+        <div id="camera-screen" class="screen active">
+            <div class="header">
+                <h1>Scontrini Papà</h1>
+            </div>
+            <div class="content-center">
+                <label for="camera-input" class="btn-primary massive-btn">
+                    📷 Scatta Foto
+                </label>
+                <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+            </div>
+        </div>
+
+        <!-- Screen 2: Review -->
+        <div id="review-screen" class="screen">
+            <div class="header">
+                <h1>Controlla Foto</h1>
+            </div>
+            <div class="image-preview-container">
+                <img id="preview-image" src="" alt="Anteprima Scontrino">
+            </div>
+            <div class="button-group">
+                <button id="btn-retake" class="btn-secondary giant-btn">❌ Riprova</button>
+                <button id="btn-send" class="btn-success giant-btn">✅ Va Bene (Invia)</button>
+            </div>
+        </div>
+
+        <!-- Screen 3: Loading -->
+        <div id="loading-screen" class="screen">
+            <div class="content-center">
+                <div class="macos-spinner"></div>
+                <h2>Invio in corso...</h2>
+            </div>
+        </div>
+
+        <!-- Screen 4: Success -->
+        <div id="success-screen" class="screen">
+            <div class="content-center">
+                <div class="success-icon">✅</div>
+                <h2>Fatto! Scontrino Inviato.</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- macOS Style Alert Modal -->
+    <div id="alert-modal" class="modal-overlay">
+        <div class="macos-alert">
+            <h3 id="alert-title">Attenzione</h3>
+            <p id="alert-message">Messaggio di errore.</p>
+            <button id="alert-btn" class="btn-primary">OK</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

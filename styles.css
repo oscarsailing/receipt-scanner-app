@@ -1,0 +1,236 @@
+/* macOS Design System Inspired CSS */
+:root {
+    --bg-color: #f5f5f7;
+    --text-color: #1d1d1f;
+    --primary-blue: #007aff;
+    --success-green: #34c759;
+    --danger-red: #ff3b30;
+    --border-color: #d2d2d7;
+    --card-bg: rgba(255, 255, 255, 0.8);
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+#app-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background-color: var(--bg-color);
+}
+
+.screen {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: var(--bg-color);
+}
+
+.screen.active {
+    display: flex;
+}
+
+.header {
+    padding: 20px;
+    text-align: center;
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 10;
+}
+
+.header h1 {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.content-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Buttons */
+button, .btn-primary, .btn-secondary, .btn-success {
+    border: none;
+    border-radius: 14px;
+    font-size: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: transform 0.1s, opacity 0.1s;
+    text-align: center;
+    display: inline-block;
+    text-decoration: none;
+}
+
+button:active, .btn-primary:active {
+    transform: scale(0.96);
+    opacity: 0.8;
+}
+
+.massive-btn {
+    width: 90%;
+    max-width: 400px;
+    padding: 40px 20px;
+    font-size: 32px;
+    background-color: var(--primary-blue);
+    color: white;
+    border-radius: 24px;
+}
+
+.giant-btn {
+    flex: 1;
+    padding: 25px 10px;
+    font-size: 22px;
+    margin: 0 10px;
+}
+
+.btn-primary {
+    background-color: var(--primary-blue);
+    color: white;
+}
+
+.btn-secondary {
+    background-color: var(--danger-red);
+    color: white;
+}
+
+.btn-success {
+    background-color: var(--success-green);
+    color: white;
+}
+
+/* Review Screen */
+.image-preview-container {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+#preview-image {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    object-fit: contain;
+}
+
+.button-group {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px;
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Loading & Success */
+.macos-spinner {
+    width: 60px;
+    height: 60px;
+    border: 6px solid rgba(0, 0, 0, 0.1);
+    border-top-color: var(--primary-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.success-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+}
+
+/* macOS Alert Modal */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.macos-alert {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    width: 80%;
+    max-width: 320px;
+    border-radius: 14px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.macos-alert h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-top: 20px;
+    padding: 0 20px;
+}
+
+.macos-alert p {
+    font-size: 14px;
+    margin: 10px 0 20px;
+    padding: 0 20px;
+    color: #333;
+}
+
+.macos-alert button {
+    width: 100%;
+    padding: 15px;
+    background: transparent;
+    color: var(--primary-blue);
+    border-top: 1px solid var(--border-color);
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 17px;
+}
+
+.macos-alert button:active {
+    background: rgba(0, 0, 0, 0.05);
+    transform: none;
+}
