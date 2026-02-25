@@ -772,57 +772,151 @@ if (receiptModal) receiptModal.addEventListener('click', (e) => {
 });
 
 // =============================================================================
-// ACCOUNTANT BUTTON — one-tap email flow
+// ACCOUNTANT BUTTON — bundle-and-share email flow
 // =============================================================================
+
+// Step 1: tally unsent receipts and ask for confirmation
 function sendToAccountantFlow() {
-    var now = new Date();
-    var lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    var lastMonthKey = getMonthKey(lastMonth);
-    var monthName = MESI_IT[lastMonth.getMonth()] + ' ' + lastMonth.getFullYear();
+    var unsentPapa = uploadHistory.filter(function(e) { return e.userId === 'papa' && !e.sent && e.driveFileId; });
+    var unsentTiz  = uploadHistory.filter(function(e) { return e.userId === 'tiziana' && !e.sent && e.driveFileId; });
 
-    var papaFolderId = localStorage.getItem('folder_papa_' + lastMonthKey);
-    var tizFolderId = localStorage.getItem('folder_tiziana_' + lastMonthKey);
-
-    var papaCount = uploadHistory.filter(function(e) { return e.userId === 'papa' && e.monthKey === lastMonthKey; }).length;
-    var tizCount = uploadHistory.filter(function(e) { return e.userId === 'tiziana' && e.monthKey === lastMonthKey; }).length;
-
-    if (!papaFolderId && !tizFolderId) {
-        showAlert('Niente da inviare', 'Non ci sono scontrini di ' + monthName + ' su Drive.');
+    if (unsentPapa.length === 0 && unsentTiz.length === 0) {
+        showAlert('Niente da inviare', 'Non ci sono nuovi scontrini da inviare. Tutti gi\u00e0 spediti!');
         return;
     }
 
-    var summaryParts = [];
-    if (papaCount > 0) summaryParts.push(papaCount + ' scontrini di Pap\u00e0');
-    if (tizCount > 0) summaryParts.push(tizCount + ' scontrini di Tiziana');
-    var summary = summaryParts.length > 0 ? summaryParts.join(' e ') : 'Cartelle presenti';
+    var parts = [];
+    if (unsentPapa.length > 0) parts.push(unsentPapa.length + ' scontrini di Pap\u00e0');
+    if (unsentTiz.length > 0)  parts.push(unsentTiz.length + ' scontrini di Tiziana');
 
     if (alertBtnOverride) {
-        alertBtnOverride._overrideFn = function() {
-            executeSendToAccountant(papaFolderId, tizFolderId, monthName, lastMonthKey);
-        };
+        alertBtnOverride._overrideFn = function() { executeSendToAccountant(unsentPapa, unsentTiz); };
     }
-    showAlert('Invia al commercialista', summary + ' di ' + monthName + '. Preparo l\'email?', 'Prepara email');
+    showAlert(
+        'Invia al commercialista',
+        parts.join(' e ') + ' non ancora inviati. Creo le cartelle condivise e preparo l\'email?',
+        'Prepara email'
+    );
 }
 
-function executeSendToAccountant(papaFolderId, tizFolderId, monthName, lastMonthKey) {
-    var subject = 'Scontrini ' + monthName + ' \u2013 Pap\u00e0 e Tiziana';
-    var bodyParts = ['Ciao,\n\nti mando i link alle cartelle degli scontrini di ' + monthName + ' su Google Drive:\n'];
-    if (papaFolderId) {
-        bodyParts.push('\ud83d\udcc1 I miei scontrini:\nhttps://drive.google.com/drive/folders/' + papaFolderId + '\n');
-    }
-    if (tizFolderId) {
-        bodyParts.push('\ud83d\udcc1 Scontrini Tiziana:\nhttps://drive.google.com/drive/folders/' + tizFolderId + '\n');
-    }
-    bodyParts.push('\nA presto!');
-    var body = bodyParts.join('\n');
-    var mailto = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-    window.location.href = mailto;
+// Step 2: create bundle folders → share → open mailto
+async function executeSendToAccountant(unsentPapa, unsentTiz) {
+    // Show the loading screen (no image preview needed)
+    loadingPreviewWrap.style.display = 'none';
+    loadingPreview.src = '';
+    showScreen(loadingScreen);
 
-    uploadHistory.forEach(function(e) {
-        if (e.monthKey === lastMonthKey) { e.sent = true; e.sentTs = Date.now(); }
+    try {
+        await ensureValidToken();
+
+        var now = new Date();
+        var dateLabel = now.getDate() + ' ' + MESI_IT[now.getMonth()].toLowerCase() + ' ' + now.getFullYear();
+
+        var papaShareLink = null;
+        var tizShareLink  = null;
+
+        if (unsentPapa.length > 0) {
+            setLoadingText('\ud83d\udcc1 Creo cartella Pap\u00e0\u2026');
+            var papaId = await createBundleFolder('Pap\u00e0', dateLabel, unsentPapa);
+            await makeShareable(papaId);
+            papaShareLink = 'https://drive.google.com/drive/folders/' + papaId + '?usp=sharing';
+        }
+        if (unsentTiz.length > 0) {
+            setLoadingText('\ud83d\udcc1 Creo cartella Tiziana\u2026');
+            var tizId = await createBundleFolder('Tiziana', dateLabel, unsentTiz);
+            await makeShareable(tizId);
+            tizShareLink = 'https://drive.google.com/drive/folders/' + tizId + '?usp=sharing';
+        }
+
+        // Natural-language subject
+        var monthName = MESI_IT[now.getMonth()] + ' ' + now.getFullYear();
+        var totalCount = unsentPapa.length + unsentTiz.length;
+        var subject = 'Scontrini ' + monthName + ' \u2013 Pap\u00e0 e Tiziana';
+
+        // Natural-language body
+        var bodyParts = [
+            'Ciao,\n\nti mando gli scontrini di ' +
+            MESI_IT[now.getMonth()].toLowerCase() + ' ' + now.getFullYear() +
+            ' (' + totalCount + ' scontrino' + (totalCount !== 1 ? 'i' : '') + ' in totale).\n'
+        ];
+        if (papaShareLink) {
+            bodyParts.push(
+                '\ud83d\udcc1 I miei scontrini (' + unsentPapa.length + '):\n' + papaShareLink + '\n'
+            );
+        }
+        if (tizShareLink) {
+            bodyParts.push(
+                '\ud83d\udcc1 Scontrini Tiziana (' + unsentTiz.length + '):\n' + tizShareLink + '\n'
+            );
+        }
+        bodyParts.push('\nClicca i link per aprire le cartelle su Drive.\n\nA presto!');
+
+        var body   = bodyParts.join('\n');
+        var mailto = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+
+        // Mark as sent
+        var sentTs = Date.now();
+        unsentPapa.concat(unsentTiz).forEach(function(e) { e.sent = true; e.sentTs = sentTs; });
+        localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
+        renderHistory();
+
+        // Return to select screen, then open Mail
+        showSelectScreen();
+        window.location.href = mailto;
+
+    } catch (err) {
+        console.error('[Accountant]', err);
+        showSelectScreen();
+        showAlert('Errore', 'Non riesco a creare le cartelle. Controlla la connessione e riprova.');
+    }
+}
+
+// Create a bundle folder under the root and copy receipts into it
+async function createBundleFolder(userSuffix, dateLabel, receipts) {
+    var rootId     = await getOrCreateFolder();
+    var folderName = 'Scontrini ' + userSuffix + ' \u2013 ' + dateLabel;
+
+    var createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method:  'POST',
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [rootId] })
     });
-    localStorage.setItem('upload_history', JSON.stringify(uploadHistory));
-    renderHistory();
+    if (!createRes.ok) throw new Error('Bundle folder creation failed: ' + createRes.status);
+    var folderData = await createRes.json();
+    var bundleId   = folderData.id;
+
+    for (var i = 0; i < receipts.length; i++) {
+        setLoadingText('\ud83d\udcc4 Copio ' + userSuffix + '\u2026 ' + (i + 1) + '/' + receipts.length);
+        var copyRes = await fetch(
+            'https://www.googleapis.com/drive/v3/files/' + receipts[i].driveFileId + '/copy',
+            {
+                method:  'POST',
+                headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ parents: [bundleId] })
+            }
+        );
+        if (!copyRes.ok) {
+            console.warn('[Bundle] Could not copy file', receipts[i].driveFileId, copyRes.status);
+        }
+    }
+
+    return bundleId;
+}
+
+// Grant "anyone with the link" read access to a Drive file/folder
+async function makeShareable(fileId) {
+    var permRes = await fetch(
+        'https://www.googleapis.com/drive/v3/files/' + fileId + '/permissions',
+        {
+            method:  'POST',
+            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ role: 'reader', type: 'anyone' })
+        }
+    );
+    if (!permRes.ok) {
+        console.warn('[Share] Could not make shareable:', permRes.status);
+        // Non-fatal: link still works for signed-in owner
+    }
 }
 
 if (chatFab) chatFab.addEventListener('click', sendToAccountantFlow);

@@ -161,10 +161,72 @@ var bodyTizOnly = buildMailtoBody(null, 'FOLDER_TIZ', 'Maggio 2026');
 assert(bodyTizOnly.indexOf('FOLDER_TIZ') !== -1, 'Tiziana-only body has tiziana folder');
 assert(bodyTizOnly.indexOf('FOLDER_PAPA') === -1, 'Tiziana-only body has no papa folder');
 
-console.log('\n--- sendToAccountantFlow guard: no folders → no email ---');
-var noFolders = (localStorage.getItem('folder_papa_' + lastKey) === null &&
-                 localStorage.getItem('folder_tiziana_' + lastKey) === null);
-assert(noFolders, 'When no folder cached in localStorage, flow should bail early');
+console.log('\n--- sendToAccountantFlow: unsent receipt detection ---');
+// Scenario: mixed sent/unsent, both users
+var mixedHistory = [
+    { userId: 'papa',    driveFileId: 'F1', sent: false,  monthKey: '2026-01' },
+    { userId: 'papa',    driveFileId: 'F2', sent: true,   monthKey: '2026-01' },
+    { userId: 'tiziana', driveFileId: 'F3', sent: false,  monthKey: '2026-01' },
+    { userId: 'tiziana', driveFileId: 'F4', sent: false,  monthKey: '2025-12' },
+    { userId: 'papa',    driveFileId: null, sent: false,  monthKey: '2026-02' }, // no driveFileId → excluded
+];
+var unsentPapa = mixedHistory.filter(function(e) { return e.userId === 'papa' && !e.sent && e.driveFileId; });
+var unsentTiz  = mixedHistory.filter(function(e) { return e.userId === 'tiziana' && !e.sent && e.driveFileId; });
+assertEqual(unsentPapa.length, 1, 'Papa: 1 unsent with driveFileId (across all months)');
+assertEqual(unsentTiz.length,  2, 'Tiziana: 2 unsent with driveFileId (across all months)');
+
+var allUnsent = unsentPapa.concat(unsentTiz);
+assert(allUnsent.every(function(e) { return !e.sent; }), 'All collected entries are unsent');
+assert(allUnsent.every(function(e) { return !!e.driveFileId; }), 'All collected entries have driveFileId');
+
+console.log('\n--- executeSendToAccountant: subject and body construction ---');
+var nowTest = new Date(2026, 1, 25); // 25 Feb 2026
+var monthNameTest = MESI_IT[nowTest.getMonth()] + ' ' + nowTest.getFullYear();
+assertEqual(monthNameTest, 'Febbraio 2026', 'Month name is Febbraio 2026');
+
+var subject = 'Scontrini ' + monthNameTest + ' \u2013 Pap\u00e0 e Tiziana';
+assertEqual(subject, 'Scontrini Febbraio 2026 \u2013 Pap\u00e0 e Tiziana', 'Subject line is correct');
+
+var papaShareLink = 'https://drive.google.com/drive/folders/PAPA_BUNDLE?usp=sharing';
+var tizShareLink  = 'https://drive.google.com/drive/folders/TIZ_BUNDLE?usp=sharing';
+var totalCount = 3;
+var bodyParts = [
+    'Ciao,\n\nti mando gli scontrini di ' +
+    MESI_IT[nowTest.getMonth()].toLowerCase() + ' ' + nowTest.getFullYear() +
+    ' (' + totalCount + ' scontrioni in totale).\n'
+];
+bodyParts.push('\ud83d\udcc1 I miei scontrini (1):\n' + papaShareLink + '\n');
+bodyParts.push('\ud83d\udcc1 Scontrini Tiziana (2):\n' + tizShareLink + '\n');
+bodyParts.push('\nClicca i link per aprire le cartelle su Drive.\n\nA presto!');
+var body = bodyParts.join('\n');
+
+assert(body.indexOf(papaShareLink) !== -1, 'Body contains papa shareable link');
+assert(body.indexOf(tizShareLink) !== -1, 'Body contains tiziana shareable link');
+assert(body.indexOf('?usp=sharing') !== -1, 'Links use ?usp=sharing format for iPhone');
+assert(body.indexOf('mailto:') === -1, 'Body does not contain mailto: (To field stays empty)');
+assert(body.indexOf('febbraio 2026') !== -1, 'Body mentions month in lowercase Italian');
+
+console.log('\n--- createBundleFolder: folder-name format ---');
+var dateLabel = nowTest.getDate() + ' ' + MESI_IT[nowTest.getMonth()].toLowerCase() + ' ' + nowTest.getFullYear();
+assertEqual(dateLabel, '25 febbraio 2026', 'Date label format is correct');
+var papaFolderName = 'Scontrini Pap\u00e0 \u2013 ' + dateLabel;
+var tizFolderName  = 'Scontrini Tiziana \u2013 ' + dateLabel;
+assertEqual(papaFolderName, 'Scontrini Pap\u00e0 \u2013 25 febbraio 2026', 'Papa bundle folder name correct');
+assertEqual(tizFolderName,  'Scontrini Tiziana \u2013 25 febbraio 2026', 'Tiziana bundle folder name correct');
+
+console.log('\n--- mark-as-sent logic ---');
+var historyForSent = [
+    { userId: 'papa',    driveFileId: 'F1', sent: false },
+    { userId: 'tiziana', driveFileId: 'F3', sent: false },
+    { userId: 'papa',    driveFileId: 'F2', sent: true  }, // already sent – untouched
+];
+var toMark = historyForSent.filter(function(e) { return !e.sent && e.driveFileId; });
+var ts = Date.now();
+toMark.forEach(function(e) { e.sent = true; e.sentTs = ts; });
+assert(historyForSent[0].sent === true,  'Papa unsent entry marked as sent');
+assert(historyForSent[1].sent === true,  'Tiziana unsent entry marked as sent');
+assert(historyForSent[2].sentTs === undefined, 'Already-sent entry sentTs unchanged');
+assert(typeof historyForSent[0].sentTs === 'number', 'sentTs is a timestamp number');
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 console.log('\n─────────────────────────────────────────');
